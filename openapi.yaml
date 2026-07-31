@@ -1,0 +1,485 @@
+openapi: 3.1.0
+info:
+  title: Life2 Lists Service REST API
+  version: 0.1.0
+  description: |
+    Authenticated REST access to the private Todoist-backed Life2 shopping list.
+    Todoist remains the system of record. Except for `GET /health`, callers must
+    provide either the configured opaque automation bearer token or a verified
+    Life2 JWT for the configured account.
+  license:
+    name: GNU General Public License v3.0
+    identifier: GPL-3.0-only
+servers:
+  - url: https://{apiId}.execute-api.{region}.amazonaws.com
+    description: AWS API Gateway HTTP API
+    variables:
+      apiId:
+        default: replace-with-api-id
+      region:
+        default: eu-west-1
+tags:
+  - name: Health
+    description: Liveness and authenticated dependency-readiness operations.
+  - name: Items
+    description: Shopping-list query and mutation operations.
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Check Lambda liveness
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: The REST Lambda is responding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /health/ready:
+    get:
+      operationId: getReadiness
+      summary: Check Todoist connectivity
+      tags: [Health]
+      responses:
+        '200':
+          description: Todoist is reachable for the configured project.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '503':
+          description: The dependency is not ready or is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ReadinessResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/items:
+    get:
+      operationId: listItems
+      summary: List shopping-list items
+      tags: [Items]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Completion state to return. Defaults to active.
+          schema:
+            type: string
+            enum: [active, completed, all]
+            default: active
+      responses:
+        '200':
+          description: Matching shopping-list items.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '503':
+          $ref: '#/components/responses/UpstreamError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      operationId: addItem
+      summary: Add a shopping-list item
+      tags: [Items]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddItemRequest'
+      responses:
+        '201':
+          description: A new item was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddItemResponse'
+        '200':
+          description: An active item with the same normalized content already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddItemResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '503':
+          $ref: '#/components/responses/UpstreamError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: clearCompletedItems
+      summary: Permanently delete completed shopping-list items
+      tags: [Items]
+      parameters:
+        - name: status
+          in: query
+          required: true
+          schema:
+            type: string
+            const: completed
+        - $ref: '#/components/parameters/DestructiveConfirmation'
+      responses:
+        '200':
+          description: Completed items were deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClearCompletedResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '503':
+          $ref: '#/components/responses/UpstreamError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/ItemId'
+    delete:
+      operationId: deleteItem
+      summary: Permanently delete an item
+      tags: [Items]
+      responses:
+        '200':
+          description: The item was deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteItemResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '503':
+          $ref: '#/components/responses/UpstreamError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/items/{itemId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/ItemId'
+    post:
+      operationId: completeItem
+      summary: Mark an item completed
+      tags: [Items]
+      responses:
+        '200':
+          description: The item was completed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompleteItemResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '503':
+          $ref: '#/components/responses/UpstreamError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/items/{itemId}/reopen:
+    parameters:
+      - $ref: '#/components/parameters/ItemId'
+    post:
+      operationId: reopenItem
+      summary: Reopen a completed item
+      tags: [Items]
+      responses:
+        '200':
+          description: The item was reopened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReopenItemResponse'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '503':
+          $ref: '#/components/responses/UpstreamError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-or-Life2-JWT
+      description: Strong opaque automation token or verified, account-allowed Life2 JWT.
+  parameters:
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      description: Todoist task identifier.
+      schema:
+        type: string
+        minLength: 1
+    DestructiveConfirmation:
+      name: X-Confirm-Destructive-Action
+      in: header
+      required: true
+      description: Must be true to authorize bulk permanent deletion.
+      schema:
+        type: string
+        const: 'true'
+  responses:
+    AuthenticationRequired:
+      description: A valid bearer token was not supplied.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: The request is invalid or destructive confirmation is absent.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: The item or route was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UpstreamError:
+      description: Todoist rejected the request, rate-limited it, or was unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: The request could not be completed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    Meta:
+      type: object
+      additionalProperties: false
+      required: [requestId]
+      properties:
+        requestId:
+          type: string
+    ShoppingListItem:
+      type: object
+      additionalProperties: false
+      required: [id, content, isCompleted]
+      properties:
+        id:
+          type: string
+        content:
+          type: string
+          minLength: 1
+          maxLength: 500
+        description:
+          type: string
+        isCompleted:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    AddItemRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: "\\S"
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [status]
+          properties:
+            status:
+              type: string
+              const: ok
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ReadinessResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [status]
+          properties:
+            status:
+              type: string
+              enum: [ready, not_ready]
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ItemListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShoppingListItem'
+        meta:
+          type: object
+          additionalProperties: false
+          required: [requestId, count]
+          properties:
+            requestId:
+              type: string
+            count:
+              type: integer
+              minimum: 0
+    AddItemResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/ShoppingListItem'
+        meta:
+          type: object
+          additionalProperties: false
+          required: [requestId, alreadyExists]
+          properties:
+            requestId:
+              type: string
+            alreadyExists:
+              type: boolean
+    ClearCompletedResponse:
+      $ref: '#/components/schemas/MutationCountResponse'
+    MutationCountResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [deletedCount]
+          properties:
+            deletedCount:
+              type: integer
+              minimum: 0
+        meta:
+          $ref: '#/components/schemas/Meta'
+    DeleteItemResponse:
+      $ref: '#/components/schemas/DeleteFlagResponse'
+    DeleteFlagResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [deleted]
+          properties:
+            deleted:
+              type: boolean
+              const: true
+        meta:
+          $ref: '#/components/schemas/Meta'
+    CompleteItemResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [completed]
+          properties:
+            completed:
+              type: boolean
+              const: true
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ReopenItemResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [reopened]
+          properties:
+            reopened:
+              type: boolean
+              const: true
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - AMBIGUOUS_ITEM
+                - AUTHENTICATION_REQUIRED
+                - CONFIGURATION_ERROR
+                - DESTRUCTIVE_ACTION_NOT_CONFIRMED
+                - INTERNAL_ERROR
+                - ITEM_NOT_FOUND
+                - ROUTE_NOT_FOUND
+                - UPSTREAM_AUTHENTICATION_FAILED
+                - UPSTREAM_RATE_LIMITED
+                - UPSTREAM_UNAVAILABLE
+                - VALIDATION_ERROR
+            message:
+              type: string
+        meta:
+          $ref: '#/components/schemas/Meta'

@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "context": {
+    "System": {
+      "application": {
+        "applicationId": "amzn1.ask.skill.replace-with-skill-id"
+      },
+      "user": {
+        "userId": "development-user"
+      },
+      "device": {
+        "deviceId": "development-device",
+        "supportedInterfaces": {}
+      },
+      "apiEndpoint": "https://api.eu.amazonalexa.com",
+      "apiAccessToken": "fixture-only-placeholder"
+    }
+  },
+  "request": {
+    "type": "LaunchRequest",
+    "requestId": "fixture-launch-request",
+    "timestamp": "2026-07-31T00:00:00Z",
+    "locale": "en-GB",
+    "shouldLinkResultBeReturned": false
+  }
+}

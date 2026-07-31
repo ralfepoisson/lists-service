@@ -1,0 +1,56 @@
+@startuml
+title lists-service v1 - Implemented logical data model
+
+hide methods
+hide stereotypes
+skinparam shadowing false
+
+note as StatusNote
+  VERIFIED API CONTRACT MODEL - NOT A LOCAL DATABASE
+  Todoist remains the system of record.
+  Provider fields checked against Todoist API v1 on 2026-07-31.
+end note
+
+entity "Todoist Project" as Project {
+  * id : string <<provider identity>>
+  --
+  name : string
+}
+
+entity "Todoist Task / ShoppingListItem" as Item {
+  * id : string <<provider identity>>
+  --
+  * projectId : string <<provider reference>>
+  * content : string
+  description : string [0..1]
+  * isCompleted : boolean
+  createdAt : timestamp [0..1]
+  completedAt : timestamp [0..1]
+}
+
+entity "Runtime Configuration" as Configuration {
+  * todoistTokenSecretArn : secret reference
+  --
+  todoistProjectId : string [preferred]
+  todoistProjectName : string [fallback]
+  * restApiTokenSecretArn : secret reference
+  * life2JwtSigningKeySecretArn : secret reference
+  * life2AllowedAccountId : identifier
+  * alexaSkillId : string
+  * logLevel : string
+  * completedLookbackDays : integer (1..90)
+}
+
+Project ||--o{ Item : contains
+Configuration ..> Project : selects exactly one
+
+note right of Configuration
+  Stores references and identifiers only.
+  Secret values are retrieved at runtime.
+  This is configuration, not persisted
+  application-domain data.
+end note
+
+StatusNote .. Item
+
+@enduml

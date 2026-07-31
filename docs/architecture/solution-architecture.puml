@@ -1,0 +1,96 @@
+@startuml
+title lists-service v1 - Implemented solution architecture
+
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+note as StatusNote
+  IMPLEMENTED CHECKOUT - NOT VERIFIED DEPLOYMENT
+  Real Todoist, AWS, Alexa, and CI proof remains pending.
+end note
+
+actor "Household member" as Household
+component "Alexa custom skill\n(en-GB)" as Alexa
+component "Personal REST client" as RestClient
+component "Life2 Webapp\nShopping page" as Webapp
+
+cloud "AWS" {
+  component "API Gateway\nHTTP API" as ApiGateway
+
+  package "REST Lambda entry point" as RestLambda {
+    component "REST request adapter" as RestAdapter
+    component "Composite authentication strategy" as AuthAdapter
+    component "Constant-time static token" as StaticAuth
+    component "Life2 JWT verifier\nHS256 + account allow-list" as JwtAuth
+  }
+
+  package "Alexa Lambda entry point" as AlexaLambda {
+    component "Alexa request/intent adapters" as AlexaAdapter
+    component "Skill ID validator" as SkillValidator
+    component "Household identity resolver" as IdentityResolver
+  }
+
+  package "Shared application package" as Application {
+    component "Shopping-list use-case objects" as UseCases
+    interface "ShoppingListRepository" as RepositoryPort
+  }
+
+  package "Shared domain package" as Domain {
+    component "ShoppingListItem" as Item
+    component "ItemContent value object" as Content
+    component "Deterministic item matcher" as Matcher
+    component "Domain error types" as DomainErrors
+  }
+
+  package "Shared infrastructure adapters" as Infrastructure {
+    component "TodoistShoppingListRepository" as TodoistRepository
+    component "Typed Todoist client\n(timeout, pagination, retry)" as TodoistClient
+    component "Secret provider adapter" as SecretProvider
+    component "Structured JSON logger" as Logger
+  }
+
+  database "Secrets Manager or\nencrypted SSM" as SecretStore
+  component "CloudWatch Logs\nand alarms" as CloudWatch
+}
+
+cloud "Todoist" {
+  component "Official Todoist REST API" as TodoistApi
+  database "Dedicated shopping-list project\n(system of record)" as TodoistProject
+}
+
+Household --> Alexa
+Alexa --> AlexaAdapter : signed Alexa request
+RestClient --> ApiGateway : HTTPS + bearer token
+Webapp --> ApiGateway : HTTPS + Life2 JWT
+ApiGateway --> RestAdapter
+
+RestAdapter --> AuthAdapter
+AuthAdapter --> StaticAuth
+AuthAdapter --> JwtAuth
+RestAdapter --> UseCases
+AlexaAdapter --> SkillValidator
+AlexaAdapter --> IdentityResolver
+AlexaAdapter --> UseCases
+
+UseCases --> Item
+UseCases --> Content
+UseCases --> Matcher
+UseCases --> DomainErrors
+UseCases --> RepositoryPort
+TodoistRepository ..|> RepositoryPort
+TodoistRepository --> TodoistClient
+TodoistClient --> TodoistApi : HTTPS
+TodoistApi --> TodoistProject
+
+AuthAdapter --> SecretProvider
+TodoistClient --> SecretProvider
+SecretProvider --> SecretStore
+RestAdapter --> Logger
+AlexaAdapter --> Logger
+TodoistClient --> Logger
+Logger --> CloudWatch
+
+StatusNote .. UseCases
+
+@enduml

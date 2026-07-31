@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  application:
+    name: Application gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build Lambda bundles
+        run: npm run build
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Validate OpenAPI contract
+        run: npx --yes @redocly/cli@2.43.1 lint openapi.yaml
+
+  terraform:
+    name: Terraform gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build Lambda bundles required by archive_file
+        run: npm run build
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+
+      - name: Check Terraform formatting
+        run: terraform -chdir=terraform fmt -check -recursive
+
+      - name: Initialize Terraform without a backend
+        run: terraform -chdir=terraform init -backend=false
+
+      - name: Validate Terraform
+        run: terraform -chdir=terraform validate

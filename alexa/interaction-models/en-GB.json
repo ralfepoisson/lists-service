@@ -1,0 +1,140 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "household list",
+      "intents": [
+        {
+          "name": "AddItemIntent",
+          "slots": [{ "name": "item", "type": "AMAZON.SearchQuery" }],
+          "samples": [
+            "add {item}",
+            "put {item} on my list",
+            "add {item} to the shopping list",
+            "I need {item}"
+          ]
+        },
+        {
+          "name": "ListItemsIntent",
+          "slots": [],
+          "samples": [
+            "what is on my list",
+            "read my shopping list",
+            "tell me what I need",
+            "list my items"
+          ]
+        },
+        {
+          "name": "RemoveItemIntent",
+          "slots": [{ "name": "item", "type": "AMAZON.SearchQuery" }],
+          "samples": ["remove {item}", "delete {item}", "take {item} off my list"]
+        },
+        {
+          "name": "CompleteItemIntent",
+          "slots": [{ "name": "item", "type": "AMAZON.SearchQuery" }],
+          "samples": [
+            "mark {item} as bought",
+            "complete {item}",
+            "cross {item} off",
+            "I bought {item}"
+          ]
+        },
+        {
+          "name": "ClearCompletedIntent",
+          "slots": [],
+          "samples": [
+            "clear completed items",
+            "delete bought items",
+            "remove everything I have completed"
+          ]
+        },
+        { "name": "AMAZON.CancelIntent", "samples": [] },
+        { "name": "AMAZON.HelpIntent", "samples": [] },
+        { "name": "AMAZON.StopIntent", "samples": [] },
+        { "name": "AMAZON.FallbackIntent", "samples": [] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": [] }
+      ],
+      "types": []
+    },
+    "dialog": {
+      "intents": [
+        {
+          "name": "AddItemIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "item",
+              "type": "AMAZON.SearchQuery",
+              "elicitationRequired": true,
+              "confirmationRequired": false,
+              "prompts": {
+                "elicitation": "Elicit.Item"
+              }
+            }
+          ]
+        },
+        {
+          "name": "RemoveItemIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "item",
+              "type": "AMAZON.SearchQuery",
+              "elicitationRequired": true,
+              "confirmationRequired": false,
+              "prompts": {
+                "elicitation": "Elicit.Item"
+              }
+            }
+          ]
+        },
+        {
+          "name": "CompleteItemIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "item",
+              "type": "AMAZON.SearchQuery",
+              "elicitationRequired": true,
+              "confirmationRequired": false,
+              "prompts": {
+                "elicitation": "Elicit.Item"
+              }
+            }
+          ]
+        },
+        {
+          "name": "ClearCompletedIntent",
+          "confirmationRequired": true,
+          "prompts": {
+            "confirmation": "Confirm.ClearCompleted"
+          },
+          "slots": []
+        }
+      ],
+      "delegationStrategy": "SKILL_RESPONSE"
+    },
+    "prompts": [
+      {
+        "id": "Elicit.Item",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What item should I use?"
+          }
+        ]
+      },
+      {
+        "id": "Confirm.ClearCompleted",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "This permanently deletes completed items. Should I continue?"
+          }
+        ]
+      }
+    ]
+  }
+}

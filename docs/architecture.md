@@ -4,8 +4,10 @@
 
 This document describes the implemented version 1 architecture. Source,
 component tests, build output, and static infrastructure contracts are present
-in the active checkout. No real Todoist call, AWS deployment, Alexa invocation,
-or CI run is claimed by this document.
+in the active checkout. After an earlier configured credential returned HTTP
+403, the deployed local boundary accepted nine real Todoist item mutations and
+returned all nine through a confirming active-list read. AWS deployment, Alexa
+invocation, and CI remain unverified.
 
 The package structure is visualized in
 [`architecture/solution-architecture.puml`](architecture/solution-architecture.puml).
@@ -38,6 +40,11 @@ Two Lambda entry points provide explicit channel separation:
 Both composition roots construct shared domain/application objects and the same
 Todoist-backed repository adapter. This choice is recorded in
 [ADR 0001](decisions/0001-separate-lambda-entry-points.md).
+
+When configuration supplies only `TODOIST_PROJECT_NAME`, composition uses the
+`TodoistProjectResolver` as a provisioner: it reuses one exact project, creates
+one if none exists, and refuses multiple exact matches. The resulting stable ID
+is injected into the repository, so item operations never search projects.
 
 ```text
 Alexa custom skill ---> Alexa Lambda adapter --\
@@ -92,7 +99,9 @@ separation.
   envelopes/error codes.
 - Alexa handler objects map request types and intents to use cases, elicit
   missing slots, manage destructive confirmation, and produce speech.
-- AWS secret-provider and structured-logger adapters isolate operational details.
+- AWS and read-only-file secret-provider adapters plus the structured logger
+  isolate operational details. File-backed secrets are restricted to the local
+  Compose runtime; Lambda continues to use AWS Secrets Manager.
 
 ### Composition and deployment
 
@@ -100,6 +109,13 @@ REST and Alexa composition roots build the object graph separately. Shared
 packages are bundled into both deployable artifacts. Terraform provisions the
 two functions, API Gateway, least-privilege roles, log retention, secret reads,
 access logs, alarms, integrations, permissions, and outputs when applied.
+
+The local REST executable has a distinct composition root that imports only the
+file secret adapter; AWS Secrets Manager is excluded from its bundle. Its
+CommonJS bundle accommodates the JWT dependency's runtime module format, while
+the Lambda bundles remain ESM. On macOS, the root launcher copies the required
+mode-600 files into private Docker-readable storage before mounting them
+read-only; source files remain ignored and never enter images or logs.
 
 ## Key flows
 
@@ -140,6 +156,7 @@ locally tested where deterministic; their deployed behavior remains unverified.
 - Lambda runtime to Todoist
 - Runtime logs to CloudWatch
 - Life2 Webapp through the same-origin `/api/lists` proxy to API Gateway
+- Life2 local Webapp through Nginx to the optional `lists-api` Compose service
 
 Untrusted transport/provider payloads must be validated before entering the
 domain. Tokens, full Alexa payloads, and sensitive item content must not appear

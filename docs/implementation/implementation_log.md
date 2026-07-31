@@ -26,6 +26,140 @@ credentials, full Alexa payloads, or sensitive shopping-item content.
 
 ---
 
+## 2026-07-31 21:25 CEST — Alexa-list item migration
+
+- **Status:** verified against the real local and Todoist boundaries
+- **Scope:** Imported the nine active items supplied by the user from their
+  Alexa Shopping List into the Life2 Shopping List.
+- **Design/decisions:** Used the Lists Service authenticated REST add operation
+  for every item so its normalization and exact-duplicate policy remained
+  authoritative; no direct provider mutation or simulated response was used.
+- **Files:** `docs/implementation/implementation_log.md` only; the operation
+  changed provider data, not application source.
+- **Validation:** All nine POST requests through the deployed Life2
+  `/api/lists/v1/items` proxy returned HTTP 201 with `alreadyExists=false`. A
+  subsequent authenticated active-list GET returned HTTP 200, count 9, and
+  confirmed all nine expected entries with none missing.
+- **Real-boundary evidence:** The Lists container was healthy with zero
+  restarts before import, and the accepted mutations plus follow-up read prove
+  the configured credential and Todoist project boundary are operational.
+- **Security/privacy:** No credential was displayed. Item contents are omitted
+  from this durable log; they remain only in the user-authorized provider data.
+- **Next actions:** Refresh the Shopping page to view the migrated list.
+
+## 2026-07-31 19:58 CEST — Local runtime repair and live token verification
+
+- **Status:** deterministic implementation verified; operator credential rejected
+- **Scope:** Repaired the local executable composition/bundle and the macOS
+  Docker secret-mount boundary, then exercised startup against the configured
+  Todoist credential without displaying it.
+- **Requirements:** `LST-ARC-002`, `LST-SEC-002`, `LST-OPS-001`,
+  `LST-TST-001`, `LST-DOC-001`
+- **Design/decisions:** Provider-neutral factories now live outside the AWS
+  composition root. `LocalRestApplicationComposition` imports only file-backed
+  secrets, while Lambda composition remains AWS-specific. The local executable
+  is CommonJS because its JWT dependency is CommonJS; Lambda artifacts remain
+  ESM. The root launcher stages mode-600 copies under a private Docker-readable
+  directory because Docker Desktop cannot bind-mount files from this checkout's
+  `/Volumes` location.
+- **Files:** `src/bootstrap/ApplicationFactories.ts`,
+  `src/bootstrap/LocalApplicationComposition.ts`,
+  `src/bootstrap/ApplicationComposition.ts`, `src/entrypoints/local-rest.ts`,
+  `scripts/build.mjs`, `Dockerfile`,
+  `tests/bootstrap/LocalApplicationComposition.test.ts`, plus root launcher,
+  Compose contract, tests, and documentation.
+- **TDD evidence:**
+  - Red: the focused composition test initially failed because
+    `LocalApplicationComposition` did not exist; after creation, its deliberately
+    short test key exposed the 32-byte JWT-key invariant.
+  - Green: the focused composition suite passed 1 test.
+  - Refactor/regression: `npm run validate` passed before the final local-bundle
+    format adjustment. After that adjustment, the equivalent format, lint,
+    strict type-check, 88 tests in 14 files, and build gates passed separately.
+    The root local-stack contract first failed on the absent secure staging
+    behavior, then passed after implementation.
+- **Other validation:** The CommonJS local bundle started on a loopback test
+  port and returned `GET /health` status 200 with `data.status=ok`. The rebuilt
+  container read all three private mounts without weakening their mode.
+- **Real-boundary evidence:** The configured value reached Todoist's real API;
+  project discovery returned HTTP 403 and the typed client translated it to
+  `UPSTREAM_AUTHENTICATION_FAILED`. The value is therefore stored but is not an
+  accepted Todoist API credential. The crash-looping container was stopped.
+- **Documentation:** Updated service status/architecture/PlantUML and root
+  local-runtime documentation/PlantUML.
+- **Deviations/risks:** No token content was printed or logged. Provider-backed
+  shopping operations remain unavailable until the operator replaces the file
+  with a valid Todoist API token and reruns the launcher.
+- **Next actions:** Replace only
+  `.life2-local/secrets/lists-todoist-token` through a masked prompt, rerun
+  `./run-life2.sh`, and repeat readiness plus signed-in Shopping acceptance.
+
+## 2026-07-31 19:31 CEST — Live configuration follow-up
+
+- **Status:** blocked only on operator-supplied Todoist credential
+- **Scope:** Rechecked the authenticated Shopping failure after another browser
+  refresh and reduced the outstanding local configuration to one private value.
+- **Evidence:** The browser and direct route still returned the expected HTTP
+  503 because no `lists-api` container was running. Both ignored configuration
+  files were absent. PostgreSQL contained exactly one distinct non-empty local
+  Auth `account_id`; that identifier was written without display to the
+  mode-600 ignored file `.life2-local/config/lists-allowed-account-id`.
+- **Security:** The Todoist token was not guessed, extracted, logged, or placed
+  in chat. The user screenshot visibly exposed a bearer token in DevTools and a
+  sign-out/sign-in rotation was recommended.
+- **Next action:** The operator must create the mode-600 ignored
+  `.life2-local/secrets/lists-todoist-token` through a masked local prompt. Then
+  rerun the launcher and execute real-provider/browser acceptance.
+
+## 2026-07-31 18:14 CEST — Named-project provisioning and local Compose boundary
+
+- **Status:** implementation and deterministic local validation verified; real
+  Todoist request pending private configuration
+- **Scope:** Added one-time resolve-or-create behavior for a name-configured
+  Todoist shopping project, a file-backed local secret adapter, a Node 24
+  container runtime, and the root `/api/lists` Compose/Nginx integration.
+- **Requirements:** `LST-SCP-001`, `LST-ARC-002`, `LST-ARC-005`, `LST-FUN-001`,
+  `LST-SEC-001`, `LST-SEC-002`, `LST-SEC-007`, `LST-TOD-001`–`004`,
+  `LST-OPS-001`, `LST-DEV-001`, `LST-TST-001`, `LST-DOC-001`
+- **Design/decisions:** `TodoistProjectResolver.resolveOrCreate` runs only while
+  constructing the repository: it reuses one exact match, creates on zero, and
+  refuses ambiguity. Item reads therefore remain mutation-free and scoped by a
+  stable injected project ID. `FileSecretProvider` implements the existing
+  `SecretProvider` port for read-only Compose mounts; AWS remains the default.
+  The Lists container is optional and starts only with real ignored local
+  configuration. Nginx returns JSON `503` when it is absent instead of routing
+  API requests to Angular's SPA fallback.
+- **TDD evidence:**
+  - Red: the first focused Vitest run failed all 4 provisioning tests because
+    `resolveOrCreate` did not exist.
+  - Red: the next focused run failed the file-provider suite at import and 3
+    configuration assertions because no local secret strategy existed.
+  - Green: the combined focused command passed 17 tests in 3 files.
+  - Regression: `npm run validate` passed formatting, ESLint, strict TypeScript,
+    87 tests in 13 files, and all three bundles including `local-rest.mjs`.
+- **Other validation:** Both root stack contracts passed; the digest-pinned,
+  unprivileged Lists image built from a 439 kB context; `./run-life2.sh up`
+  rebuilt a healthy webapp; deployed Nginx configuration validation passed; and
+  an unconfigured `/api/lists/v1/items` returned HTTP 503 JSON with stable code
+  `LISTS_SERVICE_UNAVAILABLE` rather than HTTP 200 HTML. Playwright then loaded
+  the deployed Shopping route, confirmed the signed-out guard and blank
+  assistant pane, captured `webapp/output/playwright/shopping-unconfigured.png`,
+  and reported zero browser errors or warnings.
+- **Real-boundary evidence:** Pending. The checkout contains neither a Todoist
+  token nor an allowed-account binding, so no provider project was searched or
+  created and no item data was simulated.
+- **Documentation:** Updated README, requirements, API/provider notes,
+  architecture guide, ADR 0002, both service diagrams, root README/local
+  runbook/diagrams, and the webapp implementation log.
+- **Deviations/risks:** The user's screenshot was not a missing-project response;
+  it was an unproxied SPA fallback. Project creation occurs during composition,
+  which is triggered by the first request/health initialization, rather than
+  inside every item GET. Creation is not blindly retried because the current
+  official REST v1 project endpoint documents no idempotency mechanism.
+- **Next actions:** Add the real Todoist token and allowed Life2 account ID to
+  the documented ignored files, rerun the launcher, then execute signed-in
+  browser add/list/complete/delete acceptance against Todoist.
+
 ## 2026-07-31 14:20 CEST — Life2 webapp JWT authentication boundary
 
 - **Status:** implemented and locally verified; deployed validation pending

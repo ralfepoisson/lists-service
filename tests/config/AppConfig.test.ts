@@ -21,6 +21,7 @@ describe('AppConfig', () => {
     expect(config.todoistProjectId).toBe('project-id');
     expect(config.completedLookbackDays).toBe(90);
     expect(config.life2AllowedAccountId).toBe('account-123');
+    expect(config.secretProvider).toBe('aws');
   });
 
   it('accepts a project name when an id is not configured', () => {
@@ -48,6 +49,21 @@ describe('AppConfig', () => {
   it('rejects an unsupported log level', () => {
     expect(() =>
       AppConfig.fromEnvironment({ ...completeEnvironment, LOG_LEVEL: 'verbose' })
+    ).toThrowError(ConfigurationError);
+  });
+
+  it('selects file-backed secrets for the local Compose runtime', () => {
+    const config = AppConfig.fromEnvironment({
+      ...completeEnvironment,
+      SECRET_PROVIDER: 'file'
+    });
+
+    expect(config.secretProvider).toBe('file');
+  });
+
+  it('rejects an unsupported secret provider', () => {
+    expect(() =>
+      AppConfig.fromEnvironment({ ...completeEnvironment, SECRET_PROVIDER: 'memory' })
     ).toThrowError(ConfigurationError);
   });
 

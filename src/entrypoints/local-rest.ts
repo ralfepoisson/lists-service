@@ -2,19 +2,20 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { randomUUID } from 'node:crypto';
 
 import type { RestRequest } from '../adapters/rest/RestApiController.js';
-import { RestApplicationComposition } from '../bootstrap/ApplicationComposition.js';
+import { LocalRestApplicationComposition } from '../bootstrap/LocalApplicationComposition.js';
 
 class LocalRestServer {
-  private readonly application = RestApplicationComposition.create();
+  private readonly application = LocalRestApplicationComposition.create();
 
   async start(port: number): Promise<void> {
+    const host = process.env['HOST']?.trim() || '127.0.0.1';
     const server = createServer((request, response) => {
       void this.handle(request, response);
     });
     await new Promise<void>((resolve) => {
-      server.listen(port, '127.0.0.1', resolve);
+      server.listen(port, host, resolve);
     });
-    process.stdout.write(`Lists Service REST API listening on http://127.0.0.1:${port}\n`);
+    process.stdout.write(`Lists Service REST API listening on ${host}:${port}\n`);
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -59,4 +60,9 @@ class LocalRestServer {
   }
 }
 
-await new LocalRestServer().start(Number.parseInt(process.env['PORT'] ?? '3000', 10));
+void new LocalRestServer()
+  .start(Number.parseInt(process.env['PORT'] ?? '3000', 10))
+  .catch((error: unknown) => {
+    process.stderr.write(`Lists Service failed to start: ${String(error)}\n`);
+    process.exitCode = 1;
+  });

@@ -22,9 +22,10 @@ Todoist is the sole authoritative datastore for version 1.
 - Todoist task IDs are exposed as shopping-list item IDs.
 - Active and completed state is mapped from Todoist's supported task semantics.
 - The service persists no shadow item database or event ledger.
-- `TODOIST_PROJECT_ID` is preferred. If only a project name is supplied, a
-  startup/deployment utility may resolve it and persist/configure the ID so
-  requests do not repeatedly scan projects.
+- `TODOIST_PROJECT_ID` is preferred. If only a project name is supplied,
+  service initialization reuses the one exact match or creates the project when
+  none exists, then injects that stable ID so item operations do not scan
+  projects. Multiple exact matches are rejected as ambiguous configuration.
 
 ## Rationale
 
@@ -41,6 +42,9 @@ Todoist is the sole authoritative datastore for version 1.
   application-level error translation.
 - Real provider smoke evidence is needed; mocked HTTP tests alone are
   insufficient.
+- Name-based initialization may mutate Todoist once. Project creation is not
+  blindly retried because the current REST v1 contract documents no idempotency
+  mechanism for that endpoint.
 - Migration away from Todoist would require another repository adapter and a
   deliberate data-migration plan.
 

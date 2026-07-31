@@ -29,12 +29,12 @@ entity "Todoist Task / ShoppingListItem" as Item {
 }
 
 entity "Runtime Configuration" as Configuration {
-  * todoistTokenSecretArn : secret reference
+  * todoistTokenSecretReference : secret reference
   --
   todoistProjectId : string [preferred]
   todoistProjectName : string [fallback]
-  * restApiTokenSecretArn : secret reference
-  * life2JwtSigningKeySecretArn : secret reference
+  * restApiTokenSecretReference : secret reference
+  * life2JwtSigningKeySecretReference : secret reference
   * life2AllowedAccountId : identifier
   * alexaSkillId : string
   * logLevel : string
@@ -46,7 +46,10 @@ Configuration ..> Project : selects exactly one
 
 note right of Configuration
   Stores references and identifiers only.
-  Secret values are retrieved at runtime.
+  Secret values are retrieved at runtime from
+  AWS Secrets Manager or local read-only files.
+  A name-only project is created when absent;
+  its resolved ID scopes repository operations.
   This is configuration, not persisted
   application-domain data.
 end note

@@ -9,9 +9,11 @@ the sole system of record. The same object-oriented application service powers:
 
 This project is not created by, affiliated with, or supported by Doist.
 
-The implementation is complete for local/static verification. It has not yet
-been deployed or exercised against a real Todoist project or Alexa device, so
-this README does not claim production readiness.
+The implementation is complete for local/static verification. On 31 July 2026,
+the deployed local Lists boundary used the configured Todoist project to accept
+nine real item mutations and return all nine through a confirming active-list
+read. AWS deployment, Alexa invocation, and CI remain unverified, so this README
+does not claim production readiness.
 
 ## Scope
 
@@ -70,13 +72,16 @@ npm ci
 
 ## Todoist setup
 
-1. Create a dedicated Todoist project, for example `Household Shopping`.
+1. Choose a dedicated Todoist project name, for example `Household Shopping`.
 2. Open Todoist **Settings → Integrations → Developer** and copy the personal
    API token.
 3. Create an AWS Secrets Manager secret whose entire string value is that
    token. Do not put it in this repository, Terraform variables, shell history,
    or a populated `.env` file.
-4. Prefer the project's stable ID in `TODOIST_PROJECT_ID`.
+4. Prefer an existing project's stable ID in `TODOIST_PROJECT_ID`. When only
+   `TODOIST_PROJECT_NAME` is configured, service initialization reuses the one
+   exact match or creates the project if no exact match exists. Multiple exact
+   matches remain a configuration error.
 
 If only the exact project name is known, resolve it once:
 
@@ -86,8 +91,10 @@ TODOIST_PROJECT_NAME='Household Shopping' \
 npm run resolve:project
 ```
 
-The command prints only the resolved ID. Persist that value as the Terraform
-`todoist_project_id`; normal requests never search all projects.
+The explicit utility prints only the resolved ID and never creates a project.
+Persist that value as the Terraform `todoist_project_id` when stable-ID
+operation is preferred. Name-based service initialization resolves or creates
+once per process; normal item operations never scan all projects.
 
 The implementation uses the current unified Todoist API v1 at
 `https://api.todoist.com/api/v1`, bearer authentication, cursor pagination,
@@ -113,10 +120,11 @@ Copy `.env.example` only as a reference. Never commit a populated `.env`.
 
 ## Local development
 
-The local entry points use the same AWS Secrets Manager and real Todoist
-boundary as Lambda. There is no pretend provider mode. Export the placeholder
-configuration names shown in `.env.example` through your normal secure
-environment mechanism, then run:
+The local entry points use the real Todoist boundary. There is no pretend
+provider mode. They default to AWS Secrets Manager; set `SECRET_PROVIDER=file`
+to use absolute paths to read-only local secret files through the same
+`SecretProvider` port. Export the placeholder configuration names shown in
+`.env.example` through your normal secure environment mechanism, then run:
 
 ```bash
 npm run dev:rest
@@ -125,6 +133,15 @@ npm run invoke:alexa -- tests/fixtures/alexa/launch-request.json
 
 For the fixture invocation, set `ALEXA_SKILL_ID` to the fixture application ID
 or update the placeholder in a private, uncommitted fixture.
+
+The Life2 root launcher provides the supported container integration. It starts
+the optional Lists API automatically when both ignored files exist:
+
+- `.life2-local/secrets/lists-todoist-token`; and
+- `.life2-local/config/lists-allowed-account-id`.
+
+The launcher mounts secrets read-only, derives the JWT verification-key file
+from the same local Auth signing key, and routes `/api/lists/` through Nginx.
 
 Engineering work must follow the
 [implementation guidelines](docs/implementation/implementation_guidelines.md)
@@ -266,8 +283,9 @@ status codes are in [the API guide](docs/api.md).
 
 ## Security model
 
-- Todoist and REST tokens are loaded from Secrets Manager and cached only
-  inside the warm process.
+- Todoist and REST tokens are loaded through the configured secret-provider
+  adapter—AWS Secrets Manager in Lambda or read-only files in local Compose—and
+  cached only inside the warm process.
 - REST token comparison uses equal-length constant-time comparison.
 - Life2 JWT verification pins HS256, issuer `life2.ralfe.me`, audience
   `account`, time claims, non-empty subject/email claims, and the configured
@@ -285,6 +303,8 @@ status codes are in [the API guide](docs/api.md).
 
 - **Cold-start configuration error:** check all required environment variables
   and ensure exactly one usable project ID/name is configured.
+- **Named project is absent:** initialization creates it once. If multiple exact
+  name matches exist, remove the ambiguity or configure a stable project ID.
 - **401 from this API:** verify the `Bearer` scheme and either the REST token or
   Life2 token claims/signature. The
   response intentionally gives no credential detail.

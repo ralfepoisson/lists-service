@@ -20,6 +20,19 @@ class LambdaBundleBuilder {
       sourcemap: true,
       minify: false
     });
+    await build({
+      entryPoints: {
+        'local-rest': 'src/entrypoints/local-rest.ts'
+      },
+      bundle: true,
+      format: 'cjs',
+      platform: 'node',
+      target: 'node24',
+      outdir: 'dist',
+      outExtension: { '.js': '.cjs' },
+      sourcemap: true,
+      minify: false
+    });
   }
 }
 

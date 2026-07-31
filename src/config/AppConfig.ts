@@ -13,7 +13,8 @@ export class AppConfig {
     readonly alexaSkillId: string,
     readonly logLevel: 'debug' | 'info' | 'warn' | 'error',
     readonly todoistApiBaseUrl: string,
-    readonly completedLookbackDays: number
+    readonly completedLookbackDays: number,
+    readonly secretProvider: 'aws' | 'file'
   ) {}
 
   static fromEnvironment(environment: Environment): AppConfig {
@@ -36,6 +37,7 @@ export class AppConfig {
     const completedLookbackDays = this.parseLookbackDays(environment['COMPLETED_LOOKBACK_DAYS']);
     const todoistApiBaseUrl =
       this.optionalValue(environment, 'TODOIST_API_BASE_URL') ?? 'https://api.todoist.com/api/v1';
+    const secretProvider = this.parseSecretProvider(environment['SECRET_PROVIDER']);
 
     return new AppConfig(
       todoistTokenSecretArn,
@@ -47,7 +49,8 @@ export class AppConfig {
       alexaSkillId,
       logLevel,
       todoistApiBaseUrl,
-      completedLookbackDays
+      completedLookbackDays,
+      secretProvider
     );
   }
 
@@ -78,5 +81,13 @@ export class AppConfig {
       throw new ConfigurationError('COMPLETED_LOOKBACK_DAYS must be an integer from 1 through 90.');
     }
     return days;
+  }
+
+  private static parseSecretProvider(value: string | undefined): 'aws' | 'file' {
+    const provider = value ?? 'aws';
+    if (provider !== 'aws' && provider !== 'file') {
+      throw new ConfigurationError('SECRET_PROVIDER must be aws or file.');
+    }
+    return provider;
   }
 }

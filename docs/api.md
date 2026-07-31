@@ -43,7 +43,10 @@ The implementation was checked against the
   `GET /tasks/completed/by_completion_date`, cursor-paginated as `items` plus
   `next_cursor`, with `since`/`until` intervals no longer than three months;
 - project-name resolution: `GET /projects/search`, followed by an exact
-  case-insensitive match enforced by this service.
+  case-insensitive match enforced by this service; and
+- project creation: `POST /projects` with the configured `name`, returning the
+  created project. Initialization calls this mutation only when the exact-name
+  search returns zero projects and refuses to choose when more than one matches.
 
 The current task-creation schema says content must be non-empty but does not
 publish a maximum. This service chooses 500 Unicode code points as a
@@ -55,6 +58,7 @@ jitter, and `Retry-After` support. Permanent `400`/`401`/`403`/`404` failures
 are not retried. Mutations are not blindly retried because the current REST
 task-creation contract does not document an idempotency key; an ambiguous
 network failure could otherwise create a duplicate or hide a completed delete.
+Project provisioning follows the same no-blind-retry rule.
 
 ## Completed-history limitation
 

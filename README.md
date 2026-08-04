@@ -15,6 +15,17 @@ nine real item mutations and return all nine through a confirming active-list
 read. AWS deployment, Alexa invocation, and CI remain unverified, so this README
 does not claim production readiness.
 
+## Production URL contract
+
+The canonical production origin for the REST API is
+`https://lists.life-sqrd.com`.
+
+This hostname is the intended stable custom-domain contract; it does not prove
+that API Gateway custom-domain routing, DNS, TLS, AWS deployment, Todoist, or
+Alexa have been accepted in production. Terraform currently exposes the raw
+API Gateway URL, so an actual release must provision and verify the canonical
+custom domain separately before advertising it as available.
+
 ## Scope
 
 The service repository itself deliberately excludes printing and an owned

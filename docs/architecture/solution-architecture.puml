@@ -108,4 +108,10 @@ Logger --> CloudWatch
 
 StatusNote .. UseCases
 
+note top of RestAdapter
+  Canonical production origin:
+  https://lists.life-sqrd.com
+  Custom-domain deployment remains unverified.
+end note
+
 @enduml

@@ -11,8 +11,10 @@ info:
     name: GNU General Public License v3.0
     identifier: GPL-3.0-only
 servers:
+  - url: https://lists.life-sqrd.com
+    description: Canonical production origin; deployment is not asserted by this contract
   - url: https://{apiId}.execute-api.{region}.amazonaws.com
-    description: AWS API Gateway HTTP API
+    description: Deployment-specific AWS API Gateway origin
     variables:
       apiId:
         default: replace-with-api-id

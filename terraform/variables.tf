@@ -72,12 +72,71 @@ variable "todoist_project_name" {
 }
 
 variable "alexa_skill_id" {
-  description = "Alexa custom skill ID allowed to invoke the Alexa Lambda."
+  description = "Alexa custom skill ID allowed to invoke the Alexa Lambda. Leave blank until the real skill exists."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.alexa_skill_id == "" || can(regex("^amzn1\\.ask\\.skill\\.[A-Za-z0-9-]+$", var.alexa_skill_id))
+    error_message = "alexa_skill_id must be blank or an Alexa custom skill identifier."
+  }
+}
+
+variable "rest_active_version" {
+  description = "Published REST Lambda version served by the production alias. Blank publishes a candidate without activation."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.rest_active_version == "" || can(regex("^[1-9][0-9]*$", var.rest_active_version))
+    error_message = "rest_active_version must be blank or a positive published Lambda version."
+  }
+}
+
+variable "alexa_active_version" {
+  description = "Published Alexa Lambda version served by the Alexa alias. Blank keeps Alexa unactivated."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.alexa_active_version == "" || can(regex("^[1-9][0-9]*$", var.alexa_active_version))
+    error_message = "alexa_active_version must be blank or a positive published Lambda version."
+  }
+}
+
+variable "release_git_commit" {
+  description = "Exact clean main commit bundled into this immutable Lambda release."
   type        = string
 
   validation {
-    condition     = can(regex("^amzn1\\.ask\\.skill\\.[A-Za-z0-9-]+$", var.alexa_skill_id))
-    error_message = "alexa_skill_id must be an Alexa custom skill identifier."
+    condition     = can(regex("^[0-9a-f]{40}$", var.release_git_commit))
+    error_message = "release_git_commit must be a full lowercase Git commit hash."
+  }
+}
+
+variable "rest_domain_name" {
+  description = "Canonical production hostname for the REST API."
+  type        = string
+  default     = "lists.life-sqrd.com"
+
+  validation {
+    condition     = can(regex("^[a-z0-9.-]+$", var.rest_domain_name))
+    error_message = "rest_domain_name must be a lowercase DNS hostname."
+  }
+}
+
+variable "route53_zone_id" {
+  description = "Route53 hosted zone containing rest_domain_name."
+  type        = string
+}
+
+variable "rest_certificate_arn" {
+  description = "Issued eu-west-1 ACM certificate covering rest_domain_name."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws:acm:[a-z0-9-]+:[0-9]{12}:certificate/", var.rest_certificate_arn))
+    error_message = "rest_certificate_arn must be an ACM certificate ARN."
   }
 }
 

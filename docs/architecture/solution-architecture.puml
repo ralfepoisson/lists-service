@@ -8,7 +8,7 @@ skinparam shadowing false
 note as StatusNote
   IMPLEMENTED CHECKOUT - LOCAL PROVIDER BOUNDARY VERIFIED
   Nine real Todoist mutations and a confirming read succeeded locally.
-  AWS deployment, Alexa invocation, and CI proof remain pending.
+  Production proof is recorded separately from local/provider evidence.
 end note
 
 actor "Household member" as Household
@@ -19,7 +19,10 @@ component "Local Nginx\n/api/lists proxy" as LocalProxy
 component "Local lists-api\nNode container" as LocalApi
 
 cloud "AWS" {
-  component "API Gateway\nHTTP API" as ApiGateway
+  component "Route53 aliases\nlists.life-sqrd.com" as Route53
+  component "API Gateway\nregional custom domain\nraw endpoint disabled" as ApiGateway
+  component "REST active alias\naccepted version" as RestAlias
+  component "Alexa active alias\naccepted version" as AlexaAlias
 
   package "REST Lambda entry point" as RestLambda {
     component "REST request adapter" as RestAdapter
@@ -67,14 +70,17 @@ cloud "Todoist" {
 }
 
 Household --> Alexa
-Alexa --> AlexaAdapter : signed Alexa request
 RestClient --> ApiGateway : HTTPS + bearer token
 Webapp --> ApiGateway : HTTPS + Life2 JWT
+Route53 --> ApiGateway
 Webapp --> LocalProxy : local same-origin request
 LocalProxy --> LocalApi
 LocalApi --> LocalComposition
 LocalComposition --> RestAdapter
-ApiGateway --> RestAdapter
+ApiGateway --> RestAlias
+RestAlias --> RestAdapter
+Alexa --> AlexaAlias : signed Alexa request
+AlexaAlias --> AlexaAdapter
 
 RestAdapter --> AuthAdapter
 AuthAdapter --> StaticAuth
@@ -108,10 +114,11 @@ Logger --> CloudWatch
 
 StatusNote .. UseCases
 
-note top of RestAdapter
+note top of RestAlias
   Canonical production origin:
   https://lists.life-sqrd.com
-  Custom-domain deployment remains unverified.
+  Published candidate -> acceptance -> active alias.
+  Rollback selects a retained accepted version.
 end note
 
 @enduml

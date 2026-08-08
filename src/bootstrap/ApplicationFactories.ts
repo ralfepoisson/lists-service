@@ -45,16 +45,17 @@ export class RestControllerFactory {
   ) {}
 
   async create(): Promise<RestApiController> {
+    const security = this.config.restSecurityConfiguration();
     const [service, restToken, life2SigningKey] = await Promise.all([
       new ShoppingListServiceFactory(this.config, this.secrets).create(),
-      this.secrets.getSecret(this.config.restApiTokenSecretArn),
-      this.secrets.getSecret(this.config.life2JwtSigningKeySecretArn)
+      this.secrets.getSecret(security.restApiTokenSecretArn),
+      this.secrets.getSecret(security.life2JwtSigningKeySecretArn)
     ]);
     return new RestApiController(
       service,
       new CompositeRestAuthenticator([
         new RestBearerAuthenticator(restToken),
-        new Life2JwtRestAuthenticator(life2SigningKey, this.config.life2AllowedAccountId)
+        new Life2JwtRestAuthenticator(life2SigningKey, security.life2AllowedAccountId)
       ])
     );
   }

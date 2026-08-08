@@ -17,8 +17,11 @@ class CompositionDependencies {
   readonly secrets: SecretProvider;
   readonly logger: OperationalLogger;
 
-  constructor(environment: NodeJS.ProcessEnv) {
-    this.config = AppConfig.fromEnvironment(environment);
+  constructor(environment: NodeJS.ProcessEnv, channel: 'rest' | 'alexa') {
+    this.config =
+      channel === 'rest'
+        ? AppConfig.fromRestEnvironment(environment)
+        : AppConfig.fromAlexaEnvironment(environment);
     this.secrets = new AwsSecretsManagerSecretProvider(new SecretsManagerClient({}));
     this.logger = new JsonConsoleLogger(this.config.logLevel);
   }
@@ -37,7 +40,7 @@ export class RestApplicationComposition {
   static async create(
     environment: NodeJS.ProcessEnv = process.env
   ): Promise<RestApplicationComposition> {
-    const dependencies = new CompositionDependencies(environment);
+    const dependencies = new CompositionDependencies(environment, 'rest');
     const restController = await new RestControllerFactory(
       dependencies.config,
       dependencies.secrets
@@ -55,13 +58,13 @@ export class AlexaApplicationComposition {
   static async create(
     environment: NodeJS.ProcessEnv = process.env
   ): Promise<AlexaApplicationComposition> {
-    const dependencies = new CompositionDependencies(environment);
+    const dependencies = new CompositionDependencies(environment, 'alexa');
     const service = await dependencies.createService();
     return new AlexaApplicationComposition(
       new AlexaSkillFactory(
         service,
         new AlexaSpeechPresenter(),
-        dependencies.config.alexaSkillId
+        dependencies.config.requiredAlexaSkillId()
       ).create(),
       dependencies.logger
     );

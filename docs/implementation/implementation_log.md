@@ -26,6 +26,39 @@ credentials, full Alexa payloads, or sensitive shopping-item content.
 
 ---
 
+## 2026-08-08 19:30 CEST — Versioned production release contract
+
+- **Status:** deterministic implementation verified; production validation pending
+- **Scope:** Added the maintained secret-safe production state, candidate,
+  activation, canonical-domain, and rollback path.
+- **Requirements:** `LST-OPS-001`–`LST-OPS-005`, `LST-SEC-002`,
+  `LST-SEC-005`, `LST-DOC-001`
+- **Design/decisions:** ADR 0003; separate REST/Alexa cold-start configuration;
+  published Lambda versions behind explicit `active` aliases; no Alexa
+  resources until a real skill ID exists; locked versioned S3 state; API
+  Gateway regional custom domain with its raw endpoint disabled.
+- **Files:** configuration/composition sources and tests, Terraform, production
+  scripts/example configuration, README, ADR, requirements, architecture, and
+  both PlantUML diagrams.
+- **TDD evidence:**
+  - Red: focused Vitest run failed 15 tests for missing channel-specific config,
+    remote state, aliases, custom domain, and release scripts.
+  - Green: the same focused run passed 15 tests in 2 files.
+  - Refactor/regression: exact Node 24.18.0/npm 11.16.0 clean install, format,
+    lint, strict type-check, 95 tests in 16 files, build, and high-severity audit
+    passed; the audit reported zero vulnerabilities.
+- **Other validation:** `terraform validate -json` reported valid with zero
+  errors and warnings; shell syntax and both PlantUML checks passed. Production
+  plan remains pending.
+- **Real-boundary evidence:** Current Alexa Developer Console inspection found
+  no Household Lists skill; no ID was invented and Alexa remains absent.
+  AWS resource creation and authenticated production acceptance are pending.
+- **Documentation:** Updated root/documentation indexes, architecture,
+  requirements, ADR 0003, implementation log, and both PlantUML diagrams.
+- **Deviations/risks:** None; no AWS resource has been mutated at this point.
+- **Next actions:** Complete the full gate, commit clean main, review/apply the
+  candidate, accept real reads, activate canonical HTTPS, and prove rollback.
+
 ## 2026-07-31 21:25 CEST — Alexa-list item migration
 
 - **Status:** verified against the real local and Todoist boundaries

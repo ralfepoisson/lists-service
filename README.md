@@ -12,19 +12,18 @@ This project is not created by, affiliated with, or supported by Doist.
 The implementation is complete for local/static verification. On 31 July 2026,
 the deployed local Lists boundary used the configured Todoist project to accept
 nine real item mutations and return all nine through a confirming active-list
-read. AWS deployment, Alexa invocation, and CI remain unverified, so this README
-does not claim production readiness.
+read. AWS deployment and Alexa invocation must be recorded separately after
+each release; local evidence alone does not establish production readiness.
 
 ## Production URL contract
 
 The canonical production origin for the REST API is
 `https://lists.life-sqrd.com`.
 
-This hostname is the intended stable custom-domain contract; it does not prove
-that API Gateway custom-domain routing, DNS, TLS, AWS deployment, Todoist, or
-Alexa have been accepted in production. Terraform currently exposes the raw
-API Gateway URL, so an actual release must provision and verify the canonical
-custom domain separately before advertising it as available.
+Terraform owns the API Gateway regional custom domain and Route53 aliases for
+this hostname. They are created only after an immutable REST Lambda candidate
+has passed direct authenticated acceptance and its published version is chosen
+for the `active` alias. The raw API Gateway endpoint is disabled.
 
 ## Scope
 
@@ -194,28 +193,59 @@ It never runs in CI. Unit and component tests intercept only the provider
 boundary and do not establish that real credentials, Todoist, AWS, or Alexa
 work.
 
-## Terraform deployment
+## Terraform production release
 
-Build before planning:
+Production uses a versioned, encrypted S3 backend with native lock files and
+published Lambda versions behind an explicit `active` alias. Never put secret
+values in Terraform variables or state. Copy `deploy/production.env.example`
+outside the repository, replace only identifiers/ARNs, and make it mode 0600.
+
+Bootstrap the dedicated state bucket once and sync each protected local secret
+into Secrets Manager without printing it:
 
 ```bash
-npm ci
-npm run build
-terraform -chdir=terraform init
-terraform -chdir=terraform plan \
-  -var='environment=dev' \
-  -var='todoist_token_secret_arn=arn:aws:secretsmanager:REGION:ACCOUNT:secret:TODOIST' \
-  -var='rest_api_token_secret_arn=arn:aws:secretsmanager:REGION:ACCOUNT:secret:REST' \
-  -var='life2_jwt_signing_key_secret_arn=arn:aws:secretsmanager:REGION:ACCOUNT:secret:LIFE2-JWT' \
-  -var='life2_allowed_account_id=ACCOUNT_ID' \
-  -var='todoist_project_id=PROJECT_ID' \
-  -var='alexa_skill_id=amzn1.ask.skill.SKILL_ID'
-terraform -chdir=terraform apply
+./scripts/bootstrap-production-state.sh BUCKET eu-west-1
+./scripts/sync-production-secret.sh SECRET_NAME /absolute/mode-0600/value eu-west-1
 ```
 
-Review the plan, especially IAM and secret ARNs, before applying. Useful
-outputs include the REST base URL, REST/Alexa Lambda ARNs, and log groups.
-Terraform does not deploy automatically from CI.
+Then, from a clean local `main`, publish without changing the active alias:
+
+```bash
+./scripts/deploy-production.sh /absolute/mode-0600/production.env --plan
+./scripts/deploy-production.sh /absolute/mode-0600/production.env --candidate
+```
+
+The script runs the complete quality gate under exact Node 24.18.0/npm 11.16.0
+in the digest-pinned build container. Invoke the reported candidate version
+directly with an API Gateway v2 event: require public `/health` 200,
+authenticated `/health/ready` 200, authenticated persisted Todoist reads, and
+401 for an invalid bearer. Do not use a provider mutation as readiness proof.
+The maintained acceptance command performs those checks without printing the
+token or item contents:
+
+```bash
+./scripts/accept-rest-candidate.sh /absolute/mode-0600/production.env VERSION /absolute/mode-0600/rest-token
+```
+
+Activate only the accepted numeric version; this is the step that creates or
+updates the canonical DNS/custom-domain route:
+
+```bash
+./scripts/deploy-production.sh /absolute/mode-0600/production.env --activate-rest VERSION
+```
+
+Verify `https://lists.life-sqrd.com/health`, authenticated readiness/list reads,
+TLS, and the alias target. Roll back by selecting a previously accepted,
+still-published version and rerunning the same gates:
+
+```bash
+./scripts/deploy-production.sh /absolute/mode-0600/production.env --rollback-rest PRIOR_VERSION
+```
+
+Alexa remains absent until a real private skill ID exists. Its candidate and
+alias use the analogous `--activate-alexa` and `--rollback-alexa` operations.
+Terraform never deploys automatically from CI. See
+[ADR 0003](docs/decisions/0003-versioned-production-release.md).
 
 ## Alexa Developer Console
 

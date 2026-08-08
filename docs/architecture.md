@@ -106,9 +106,14 @@ separation.
 ### Composition and deployment
 
 REST and Alexa composition roots build the object graph separately. Shared
-packages are bundled into both deployable artifacts. Terraform provisions the
-two functions, API Gateway, least-privilege roles, log retention, secret reads,
-access logs, alarms, integrations, permissions, and outputs when applied.
+packages are bundled into both deployable artifacts. Terraform publishes
+immutable function versions, preserves the accepted versions behind `active`
+aliases, and provisions API Gateway, the canonical regional custom domain,
+Route53 aliases, least-privilege roles, log retention, secret reads, access
+logs, alarms, integrations, permissions, and outputs. A candidate can be
+invoked directly before alias activation; rollback is an explicit alias move
+to a retained accepted version. Alexa resources remain absent until the real
+private skill ID is configured.
 
 The local REST executable has a distinct composition root that imports only the
 file secret adapter; AWS Secrets Manager is excluded from its bundle. Its

@@ -1,8 +1,8 @@
 locals {
-  monitored_functions = {
-    rest  = aws_lambda_function.rest.function_name
-    alexa = aws_lambda_function.alexa.function_name
-  }
+  monitored_functions = merge(
+    { rest = aws_lambda_function.rest.function_name },
+    local.alexa_enabled ? { alexa = aws_lambda_function.alexa[0].function_name } : {}
+  )
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {

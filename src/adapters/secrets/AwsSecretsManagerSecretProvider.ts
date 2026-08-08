@@ -25,9 +25,10 @@ export class AwsSecretsManagerSecretProvider implements SecretProvider {
 
   private async loadSecret(secretArn: string): Promise<string> {
     const response = await this.client.send(new GetSecretValueCommand({ SecretId: secretArn }));
-    if (response.SecretString === undefined || response.SecretString.length === 0) {
+    const normalized = response.SecretString?.trim();
+    if (normalized === undefined || normalized.length === 0) {
       throw new ConfigurationError(`Secret ${secretArn} has no string value.`);
     }
-    return response.SecretString;
+    return normalized;
   }
 }

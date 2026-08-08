@@ -31,6 +31,7 @@ Alexa, and CI remain unverified real boundaries until separately exercised.
 
 - [ADR 0001: Separate Lambda entry points](decisions/0001-separate-lambda-entry-points.md)
 - [ADR 0002: Todoist as the system of record](decisions/0002-todoist-system-of-record.md)
+- [ADR 0003: Versioned production release](decisions/0003-versioned-production-release.md)
 
 ## Source specification
 

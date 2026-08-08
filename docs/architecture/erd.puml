@@ -36,7 +36,10 @@ entity "Runtime Configuration" as Configuration {
   * restApiTokenSecretReference : secret reference
   * life2JwtSigningKeySecretReference : secret reference
   * life2AllowedAccountId : identifier
-  * alexaSkillId : string
+  alexaSkillId : string [only after real skill creation]
+  * releaseGitCommit : sha1
+  restActiveVersion : positive integer [0..1]
+  alexaActiveVersion : positive integer [0..1]
   * logLevel : string
   * completedLookbackDays : integer (1..90)
 }
@@ -52,6 +55,8 @@ note right of Configuration
   its resolved ID scopes repository operations.
   This is configuration, not persisted
   application-domain data.
+  Published Lambda versions and aliases provide
+  release rollback; Todoist data is not copied.
 end note
 
 StatusNote .. Item

@@ -15,7 +15,7 @@ export class LocalRestApplicationComposition {
   static async create(
     environment: NodeJS.ProcessEnv = process.env
   ): Promise<LocalRestApplicationComposition> {
-    const config = AppConfig.fromEnvironment(environment);
+    const config = AppConfig.fromRestEnvironment(environment);
     if (config.secretProvider !== 'file') {
       throw new ConfigurationError('The local REST runtime requires SECRET_PROVIDER=file.');
     }

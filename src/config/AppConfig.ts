@@ -7,25 +7,61 @@ export class AppConfig {
     readonly todoistTokenSecretArn: string,
     readonly todoistProjectId: string | undefined,
     readonly todoistProjectName: string | undefined,
-    readonly restApiTokenSecretArn: string,
-    readonly life2JwtSigningKeySecretArn: string,
-    readonly life2AllowedAccountId: string,
-    readonly alexaSkillId: string,
+    readonly restApiTokenSecretArn: string | undefined,
+    readonly life2JwtSigningKeySecretArn: string | undefined,
+    readonly life2AllowedAccountId: string | undefined,
+    readonly alexaSkillId: string | undefined,
     readonly logLevel: 'debug' | 'info' | 'warn' | 'error',
     readonly todoistApiBaseUrl: string,
     readonly completedLookbackDays: number,
     readonly secretProvider: 'aws' | 'file'
   ) {}
 
-  static fromEnvironment(environment: Environment): AppConfig {
+  static fromRestEnvironment(environment: Environment): AppConfig {
+    return this.fromEnvironment(environment, 'rest');
+  }
+
+  static fromAlexaEnvironment(environment: Environment): AppConfig {
+    return this.fromEnvironment(environment, 'alexa');
+  }
+
+  restSecurityConfiguration(): {
+    restApiTokenSecretArn: string;
+    life2JwtSigningKeySecretArn: string;
+    life2AllowedAccountId: string;
+  } {
+    return {
+      restApiTokenSecretArn: AppConfig.requireConfigured(
+        this.restApiTokenSecretArn,
+        'REST_API_TOKEN_SECRET_ARN'
+      ),
+      life2JwtSigningKeySecretArn: AppConfig.requireConfigured(
+        this.life2JwtSigningKeySecretArn,
+        'LIFE2_JWT_SIGNING_KEY_SECRET_ARN'
+      ),
+      life2AllowedAccountId: AppConfig.requireConfigured(
+        this.life2AllowedAccountId,
+        'LIFE2_ALLOWED_ACCOUNT_ID'
+      )
+    };
+  }
+
+  requiredAlexaSkillId(): string {
+    return AppConfig.requireConfigured(this.alexaSkillId, 'ALEXA_SKILL_ID');
+  }
+
+  private static fromEnvironment(environment: Environment, channel: 'rest' | 'alexa'): AppConfig {
     const todoistTokenSecretArn = this.requireValue(environment, 'TODOIST_TOKEN_SECRET_ARN');
-    const restApiTokenSecretArn = this.requireValue(environment, 'REST_API_TOKEN_SECRET_ARN');
-    const life2JwtSigningKeySecretArn = this.requireValue(
-      environment,
-      'LIFE2_JWT_SIGNING_KEY_SECRET_ARN'
-    );
-    const life2AllowedAccountId = this.requireValue(environment, 'LIFE2_ALLOWED_ACCOUNT_ID');
-    const alexaSkillId = this.requireValue(environment, 'ALEXA_SKILL_ID');
+    const restApiTokenSecretArn =
+      channel === 'rest' ? this.requireValue(environment, 'REST_API_TOKEN_SECRET_ARN') : undefined;
+    const life2JwtSigningKeySecretArn =
+      channel === 'rest'
+        ? this.requireValue(environment, 'LIFE2_JWT_SIGNING_KEY_SECRET_ARN')
+        : undefined;
+    const life2AllowedAccountId =
+      channel === 'rest' ? this.requireValue(environment, 'LIFE2_ALLOWED_ACCOUNT_ID') : undefined;
+    const alexaSkillId =
+      channel === 'alexa' ? this.requireValue(environment, 'ALEXA_SKILL_ID') : undefined;
     const todoistProjectId = this.optionalValue(environment, 'TODOIST_PROJECT_ID');
     const todoistProjectName = this.optionalValue(environment, 'TODOIST_PROJECT_NAME');
     if (todoistProjectId === undefined && todoistProjectName === undefined) {
@@ -52,6 +88,13 @@ export class AppConfig {
       completedLookbackDays,
       secretProvider
     );
+  }
+
+  private static requireConfigured(value: string | undefined, name: string): string {
+    if (value === undefined) {
+      throw new ConfigurationError(`${name} is not configured for this runtime.`);
+    }
+    return value;
   }
 
   private static requireValue(environment: Environment, name: string): string {

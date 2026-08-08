@@ -26,6 +26,33 @@ credentials, full Alexa payloads, or sensitive shopping-item content.
 
 ---
 
+## 2026-08-08 19:52 CEST — Lambda ESM candidate packaging repair
+
+- **Status:** deterministic repair verified; replacement candidate pending
+- **Scope:** Repaired the production Lambda ESM bundle after immutable candidate
+  version 1 failed direct health acceptance before provider access.
+- **Requirements:** `LST-ARC-004`, `LST-OPS-005`, `LST-TST-001`
+- **Design/decisions:** Supply Node's `createRequire` in the esbuild ESM banner
+  so bundled CommonJS dependencies can resolve built-in modules. Candidate 1
+  remains published but was never selected by an alias or public route.
+- **Files:** `scripts/build.mjs`, release-asset regression test, implementation
+  log.
+- **TDD evidence:**
+  - Red: the new release-asset test failed because the ESM build lacked
+    `createRequire(import.meta.url)`.
+  - Green: the focused release suite passed 5 tests.
+  - Refactor/regression: exact Node 24.18.0/npm 11.16.0 clean install, format,
+    lint, strict type-check, 96 tests in 16 files, build, and audit passed with
+    zero vulnerabilities.
+- **Real-boundary evidence:** Direct invocation of candidate 1 returned Lambda
+  `FunctionError=Unhandled` with `Dynamic require of node:https is not
+supported`; no Todoist request or mutation occurred and no alias/DNS exists.
+- **Documentation:** This implementation-log entry records the failed-candidate
+  lineage and preserves honest production evidence.
+- **Deviations/risks:** Replacement candidate still requires real acceptance.
+- **Next actions:** Commit the repair, publish the next immutable candidate, and
+  repeat non-mutating acceptance before activation.
+
 ## 2026-08-08 19:30 CEST — Versioned production release contract
 
 - **Status:** deterministic implementation verified; production validation pending

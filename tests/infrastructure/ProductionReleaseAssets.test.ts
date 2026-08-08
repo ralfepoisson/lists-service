@@ -18,6 +18,13 @@ describe('production release assets', () => {
     expect(main).toContain('RELEASE_GIT_COMMIT');
   });
 
+  it('provides Node createRequire to bundled CommonJS dependencies in ESM Lambdas', () => {
+    const build = read('scripts/build.mjs');
+
+    expect(build).toContain('createRequire(import.meta.url)');
+    expect(build).toContain('banner:');
+  });
+
   it('activates the canonical HTTPS origin only through the REST alias', () => {
     const main = read('terraform/main.tf');
 

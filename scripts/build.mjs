@@ -15,6 +15,9 @@ class LambdaBundleBuilder {
       format: 'esm',
       platform: 'node',
       target: 'node24',
+      banner: {
+        js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
+      },
       outdir: 'dist',
       outExtension: { '.js': '.mjs' },
       sourcemap: true,

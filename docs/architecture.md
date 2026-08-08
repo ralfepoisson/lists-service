@@ -6,8 +6,10 @@ This document describes the implemented version 1 architecture. Source,
 component tests, build output, and static infrastructure contracts are present
 in the active checkout. After an earlier configured credential returned HTTP
 403, the deployed local boundary accepted nine real Todoist item mutations and
-returned all nine through a confirming active-list read. AWS deployment, Alexa
-invocation, and CI remain unverified.
+returned all nine through a confirming active-list read. Production REST
+Lambda version 2, canonical API Gateway TLS/authentication, and real persisted
+Todoist reads were verified on 8 August 2026. Alexa invocation and CI remain
+unverified.
 
 The package structure is visualized in
 [`architecture/solution-architecture.puml`](architecture/solution-architecture.puml).

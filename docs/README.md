@@ -6,8 +6,9 @@ This directory is the documentation entry point for `lists-service`.
 
 The checkout contains the TypeScript service, REST and Alexa adapters, current
 Todoist API v1 adapter, Terraform, tests, interaction model, and documentation.
-Static/local validation is recorded in the implementation log. Todoist, AWS,
-Alexa, and CI remain unverified real boundaries until separately exercised.
+Static/local validation and the 8 August 2026 production REST/AWS/Todoist read
+acceptance are recorded in the implementation log. Alexa and CI remain
+unverified real boundaries until separately exercised.
 
 ## Read before implementation
 

@@ -6,9 +6,10 @@ skinparam packageStyle rectangle
 skinparam shadowing false
 
 note as StatusNote
-  IMPLEMENTED CHECKOUT - LOCAL PROVIDER BOUNDARY VERIFIED
+  IMPLEMENTED CHECKOUT - REST PRODUCTION READ BOUNDARY VERIFIED
   Nine real Todoist mutations and a confirming read succeeded locally.
-  Production proof is recorded separately from local/provider evidence.
+  REST Lambda v2, canonical TLS/auth, and Todoist reads verified 2026-08-08.
+  Alexa and CI remain unverified.
 end note
 
 actor "Household member" as Household

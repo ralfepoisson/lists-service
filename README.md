@@ -12,8 +12,9 @@ This project is not created by, affiliated with, or supported by Doist.
 The implementation is complete for local/static verification. On 31 July 2026,
 the deployed local Lists boundary used the configured Todoist project to accept
 nine real item mutations and return all nine through a confirming active-list
-read. AWS deployment and Alexa invocation must be recorded separately after
-each release; local evidence alone does not establish production readiness.
+read. On 8 August 2026, REST Lambda version 2 from commit `67e8ba7` passed
+direct candidate acceptance and canonical TLS/authenticated read verification
+in production. Alexa invocation and CI remain unverified.
 
 ## Production URL contract
 
@@ -365,8 +366,9 @@ status codes are in [the API guide](docs/api.md).
 
 ## Known limitations and future work
 
-- Real Todoist, deployed AWS, Alexa device, and CI execution remain to be
-  verified.
+- The deployed REST/AWS/Todoist boundary is verified for non-mutating health,
+  authentication, readiness, and persisted reads. Alexa simulator/device and
+  CI execution remain unverified.
 - Completed reads and clearing cover only the configured rolling 1–90 day
   window.
 - Reopening is exposed by REST but intentionally omitted from voice v1.

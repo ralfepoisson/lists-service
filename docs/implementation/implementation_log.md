@@ -26,6 +26,51 @@ credentials, full Alexa payloads, or sensitive shopping-item content.
 
 ---
 
+## 2026-08-08 20:08 CEST — Production REST activation and acceptance
+
+- **Status:** verified for REST/AWS/Todoist production reads; Alexa blocked
+- **Scope:** Provisioned the dedicated production state/secrets/runtime,
+  accepted immutable REST candidate 2, and activated canonical HTTPS.
+- **Requirements:** `LST-SCP-001`, `LST-FUN-010`, `LST-SEC-001`–`LST-SEC-005`,
+  `LST-TOD-004`, `LST-OPS-002`–`LST-OPS-005`
+- **Design/decisions:** Candidate 1 remained unactivated after packaging failure;
+  candidate 2 from commit `67e8ba74c322add0e6901c16e44f719f06a10416`
+  passed before the `active` alias and DNS were created. No provider mutation
+  was used as proof.
+- **TDD evidence:** Exact Node 24.18.0/npm 11.16.0 gate passed 96 tests in 16
+  files plus format, lint, strict type-check, build, and zero-vulnerability
+  audit immediately before publication and activation.
+- **Other validation:** Terraform candidate plan was 11 add/0 change/0 destroy;
+  repair candidate plan was 0/1/0; activation was 15/0/0. Post-activation plan
+  reported no changes. S3 state versioning is enabled with nine retained state
+  versions and native lock-file history.
+- **Real-boundary evidence:** Direct version-2 acceptance returned health 200,
+  invalid bearer 401, authenticated Todoist readiness 200, and authenticated
+  persisted list read 200/count 9. Canonical TLS used the Amazon-issued
+  `*.life-sqrd.com` certificate and the same four canonical checks passed when
+  resolved to the API Gateway endpoint. Independent Google and Cloudflare DNS
+  over HTTPS returned public A answers; Route53 test DNS returned `NOERROR`.
+  The raw execute-api endpoint returned 404. Lambda is Node 24/ARM64 with code
+  SHA-256 `Cp0ZXBwUQkZSyip351Y3WuGHq0SZTbqPRMn2X7MzMf4=` and `active` selects
+  version 2.
+- **Backups/rollback:** Lambda versions 1 and 2 are retained and state is
+  versioned. The maintained rollback command can select a retained accepted
+  version; this initial release has no earlier accepted version, so an actual
+  alias rollback was correctly not fabricated. Candidate 1 is known-bad and
+  must never be selected.
+- **Alexa:** No Household Lists skill exists in the authenticated Developer
+  Console. Terraform therefore created no Alexa Lambda, role, permission, or
+  alias and no skill ID was invented. Simulator/device acceptance is blocked
+  on creation/configuration of that real private skill.
+- **Documentation:** README/status, architecture status/PlantUML, and this
+  evidence entry.
+- **Deviations/risks:** This workstation's intercepted recursive resolver held
+  a prior NXDOMAIN after public authoritative propagation; independent public
+  resolvers and direct canonical TLS verified the published boundary.
+- **Next actions:** Create the private en-GB Alexa skill when Amazon-side work is
+  authorized, then deploy/accept its immutable candidate and record real
+  simulator/device evidence.
+
 ## 2026-08-08 19:52 CEST — Lambda ESM candidate packaging repair
 
 - **Status:** deterministic repair verified; replacement candidate pending

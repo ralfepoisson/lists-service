@@ -38,6 +38,21 @@ describe('RestApiController', () => {
     expect(response.body).toContain('"status":"ok"');
   });
 
+  it('publishes the component semantic version and release revision without authentication', async () => {
+    const previous = process.env['LIFE2_RELEASE_REVISION'];
+    process.env['LIFE2_RELEASE_REVISION'] = 'lists-test-revision';
+    try {
+      const fixture = new RestControllerFixture();
+      const response = await fixture.controller.handle(fixture.request({ path: '/version' }));
+      expect(JSON.parse(response.body).data).toEqual({
+        schemaVersion: 1, component: 'lists-service', version: '0.2.0', revision: 'lists-test-revision'
+      });
+    } finally {
+      if (previous === undefined) delete process.env['LIFE2_RELEASE_REVISION'];
+      else process.env['LIFE2_RELEASE_REVISION'] = previous;
+    }
+  });
+
   it('protects every endpoint except liveness', async () => {
     const fixture = new RestControllerFixture();
 

@@ -218,6 +218,7 @@ locals {
   rest_routes = toset([
     "GET /health",
     "GET /health/ready",
+    "GET /version",
     "GET /v1/items",
     "POST /v1/items",
     "DELETE /v1/items",

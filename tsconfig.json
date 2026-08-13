@@ -13,6 +13,7 @@
     "useUnknownInCatchVariables": true,
     "forceConsistentCasingInFileNames": true,
     "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
     "declaration": true,
     "sourceMap": true,
     "outDir": "dist",

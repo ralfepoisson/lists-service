@@ -2,6 +2,7 @@ import type { ShoppingListService } from '../../application/ShoppingListService.
 import type { ItemStatus } from '../../application/ports/ShoppingListRepository.js';
 import { ApplicationError, RouteNotFoundError, ValidationError } from '../../domain/errors.js';
 import type { RestAuthenticator } from './RestBearerAuthenticator.js';
+import packageJson from '../../../package.json' with { type: 'json' };
 
 export interface RestRequest {
   readonly method: string;
@@ -28,6 +29,17 @@ export class RestApiController {
     try {
       if (request.method === 'GET' && request.path === '/health') {
         return this.success(200, { status: 'ok' }, request.requestId);
+      }
+      if (request.method === 'GET' && request.path === '/version') {
+        return this.success(200, {
+          schemaVersion: 1,
+          component: 'lists-service',
+          version: packageJson.version,
+          revision:
+            process.env['LIFE2_RELEASE_REVISION'] ??
+            process.env['RELEASE_GIT_COMMIT'] ??
+            'development'
+        }, request.requestId);
       }
       if (!this.authenticator.isAuthenticated(request.headers['authorization'])) {
         return this.error(

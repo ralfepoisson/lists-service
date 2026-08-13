@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Life2 Lists Service REST API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Authenticated REST access to the private Todoist-backed Life2 shopping list.
     Todoist remains the system of record. Except for `GET /health`, callers must
@@ -28,6 +28,30 @@ tags:
 security:
   - bearerAuth: []
 paths:
+  /version:
+    get:
+      operationId: getComponentVersion
+      summary: Read the deployed component version
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: Package SemVer and immutable build revision.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: object
+                    required: [schemaVersion, component, version, revision]
+                    properties:
+                      schemaVersion: { type: integer, enum: [1] }
+                      component: { type: string, enum: [lists-service] }
+                      version: { type: string }
+                      revision: { type: string }
+                  meta: { type: object }
   /health:
     get:
       operationId: getHealth

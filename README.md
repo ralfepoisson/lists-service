@@ -1,5 +1,9 @@
 # Life2 Lists Service
 
+Public `GET /version` publishes schema version `1`, the SemVer from
+`package.json`, and the immutable Lambda/container release revision without
+requiring Todoist access or authentication.
+
 `lists-service` is a private, single-household shopping-list service. Todoist is
 the sole system of record. The same object-oriented application service powers:
 

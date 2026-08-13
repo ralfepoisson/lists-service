@@ -1,4 +1,5 @@
 @startuml
+note "Public /version exposes package SemVer and immutable Lambda/container revision." as VersionMetadata
 title lists-service v1 - Implemented solution architecture
 
 skinparam componentStyle rectangle

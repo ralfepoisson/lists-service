@@ -38,7 +38,9 @@ class LocalRestServer {
       };
       const restResponse = await application.restController.handle(restRequest);
       response.writeHead(restResponse.statusCode, restResponse.headers);
-      response.end(restResponse.body);
+      response.end(
+        restResponse.isBase64Encoded ? Buffer.from(restResponse.body, 'base64') : restResponse.body
+      );
     } catch {
       response.writeHead(500, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ error: { code: 'LOCAL_SERVER_ERROR' } }));

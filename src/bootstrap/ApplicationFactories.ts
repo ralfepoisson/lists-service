@@ -3,11 +3,13 @@ import { Life2JwtRestAuthenticator } from '../adapters/rest/Life2JwtRestAuthenti
 import { RestApiController } from '../adapters/rest/RestApiController.js';
 import { RestBearerAuthenticator } from '../adapters/rest/RestBearerAuthenticator.js';
 import { FetchHttpTransport } from '../adapters/todoist/FetchHttpTransport.js';
+import { PdfKitShoppingListRenderer } from '../adapters/pdf/PdfKitShoppingListRenderer.js';
 import { TimerSleeper } from '../adapters/todoist/ports/Sleeper.js';
 import { TodoistClient } from '../adapters/todoist/TodoistClient.js';
 import { TodoistProjectResolver } from '../adapters/todoist/TodoistProjectResolver.js';
 import { TodoistShoppingListRepository } from '../adapters/todoist/TodoistShoppingListRepository.js';
 import { ShoppingListService } from '../application/ShoppingListService.js';
+import { ShoppingListPrintService } from '../application/ShoppingListPrintService.js';
 import type { SecretProvider } from '../application/ports/SecretProvider.js';
 import type { AppConfig } from '../config/AppConfig.js';
 
@@ -56,7 +58,8 @@ export class RestControllerFactory {
       new CompositeRestAuthenticator([
         new RestBearerAuthenticator(restToken),
         new Life2JwtRestAuthenticator(life2SigningKey, security.life2AllowedAccountId)
-      ])
+      ]),
+      new ShoppingListPrintService(service, new PdfKitShoppingListRenderer())
     );
   }
 }

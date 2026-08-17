@@ -41,7 +41,9 @@ cloud "AWS" {
 
   package "Shared application package" as Application {
     component "Shopping-list use-case objects" as UseCases
+    component "ShoppingListPrintService\ntransient active-list snapshot" as PrintUseCase
     interface "ShoppingListRepository" as RepositoryPort
+    interface "ShoppingListPdfRenderer" as PdfPort
   }
 
   package "Shared domain package" as Domain {
@@ -57,6 +59,7 @@ cloud "AWS" {
     component "Typed Todoist client\n(timeout, pagination, retry)" as TodoistClient
     component "Secret provider strategy\nAWS or read-only file" as SecretProvider
     component "Structured JSON logger" as Logger
+    component "PdfKitShoppingListRenderer\nA4 attachment" as PdfRenderer
   }
 
   database "Secrets Manager or\nencrypted SSM" as SecretStore
@@ -88,6 +91,7 @@ RestAdapter --> AuthAdapter
 AuthAdapter --> StaticAuth
 AuthAdapter --> JwtAuth
 RestAdapter --> UseCases
+RestAdapter --> PrintUseCase : GET /v1/items.pdf
 AlexaAdapter --> SkillValidator
 AlexaAdapter --> IdentityResolver
 AlexaAdapter --> UseCases
@@ -97,6 +101,9 @@ UseCases --> Content
 UseCases --> Matcher
 UseCases --> DomainErrors
 UseCases --> RepositoryPort
+PrintUseCase --> UseCases : list active items
+PrintUseCase --> PdfPort
+PdfRenderer ..|> PdfPort
 TodoistRepository ..|> RepositoryPort
 TodoistRepository --> TodoistClient
 ProjectResolver --> TodoistClient

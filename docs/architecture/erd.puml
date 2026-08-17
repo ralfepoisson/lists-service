@@ -59,6 +59,11 @@ note right of Configuration
   release rollback; Todoist data is not copied.
 end note
 
+note bottom of Item
+  GET /v1/items.pdf reads active tasks and renders a transient
+  printable snapshot. No PDF or duplicate list entity is persisted.
+end note
+
 StatusNote .. Item
 
 @enduml

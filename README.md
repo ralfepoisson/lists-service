@@ -305,6 +305,10 @@ curl "$LISTS_URL/v1/items" \
 curl "$LISTS_URL/v1/items?status=completed" \
   -H "Authorization: Bearer $LISTS_TOKEN"
 
+curl "$LISTS_URL/v1/items.pdf" \
+  -H "Authorization: Bearer $LISTS_TOKEN" \
+  --output shopping-list.pdf
+
 curl -X POST "$LISTS_URL/v1/items" \
   -H "Authorization: Bearer $LISTS_TOKEN" \
   -H "Content-Type: application/json" \
@@ -382,8 +386,9 @@ status codes are in [the API guide](docs/api.md).
 - One configured Life2 account/household and Todoist project are supported;
   Alexa account linking and multi-household routing are extension points, not
   implemented behavior.
-- Printing may later consume the authenticated REST API, but no printing
-  infrastructure is included now.
+- `GET /v1/items.pdf` renders the current active Todoist items as a transient
+  A4 PDF download. The service stores no generated file and the webapp exposes
+  it through the Shopping page's **Print** button.
 
 ## Documentation map
 

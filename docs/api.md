@@ -10,6 +10,8 @@ verified on 2026-07-31.
 - `GET /health/ready` calls Todoist for the configured project and requires the
   REST bearer token.
 - `GET /v1/items?status=active|completed|all` defaults to `active`.
+- `GET /v1/items.pdf` reads the current active items and returns a transient A4
+  PDF attachment named `shopping-list.pdf`; the generated document is not stored.
 - `POST /v1/items` returns `201` for a created task and `200` with
   `meta.alreadyExists=true` for an exact normalized active duplicate.
 - `DELETE /v1/items/{itemId}` permanently deletes one task.
@@ -22,8 +24,10 @@ verified on 2026-07-31.
 All protected routes require `Authorization: Bearer <token>`. The token may be
 the configured opaque automation credential or a Life2 JWT. JWT verification
 pins `HS256`, issuer `life2.ralfe.me`, audience `account`, expiry/time claims,
-non-empty `sub` and `email`, and the single configured `accountId`. Responses use
-`data`/`meta` or `error`/`meta` envelopes with a correlation request ID.
+non-empty `sub` and `email`, and the single configured `accountId`. JSON
+responses use `data`/`meta` or `error`/`meta` envelopes with a correlation
+request ID. The successful PDF route instead returns `application/pdf` with a
+download content disposition; its errors retain the standard JSON envelope.
 
 ## Todoist provider contract
 

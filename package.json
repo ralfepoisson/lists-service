@@ -1,6 +1,6 @@
 {
   "name": "@life2/lists-service",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Private Todoist-backed shopping list API and Alexa custom skill for Life2.",
   "type": "module",
@@ -31,13 +31,15 @@
     "@aws-sdk/client-secrets-manager": "3.1099.0",
     "ask-sdk-core": "2.14.0",
     "ask-sdk-model": "1.86.0",
-    "jsonwebtoken": "9.0.3"
+    "jsonwebtoken": "9.0.3",
+    "pdfkit": "^0.17.2"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/aws-lambda": "8.10.162",
     "@types/jsonwebtoken": "9.0.10",
     "@types/node": "24.10.13",
+    "@types/pdfkit": "^0.17.3",
     "@typescript-eslint/eslint-plugin": "8.65.0",
     "@typescript-eslint/parser": "8.65.0",
     "@vitest/coverage-v8": "4.1.10",

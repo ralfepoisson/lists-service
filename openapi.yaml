@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Life2 Lists Service REST API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Authenticated REST access to the private Todoist-backed Life2 shopping list.
     Todoist remains the system of record. Except for `GET /health`, callers must
@@ -178,6 +178,33 @@ paths:
                 $ref: '#/components/schemas/ClearCompletedResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '503':
+          $ref: '#/components/responses/UpstreamError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/items.pdf:
+    get:
+      operationId: printActiveItems
+      summary: Download the active shopping list as a PDF
+      description: Reads the current active items from Todoist and renders a non-persisted printable snapshot.
+      tags: [Items]
+      responses:
+        '200':
+          description: A printable A4 PDF containing the current active shopping-list items.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: attachment; filename="shopping-list.pdf"
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
         '401':
           $ref: '#/components/responses/AuthenticationRequired'
         '502':

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { RestApiController, type RestRequest } from '../../src/adapters/rest/RestApiController.js';
 import { RestBearerAuthenticator } from '../../src/adapters/rest/RestBearerAuthenticator.js';
 import { ShoppingListService } from '../../src/application/ShoppingListService.js';
+import { ShoppingListPrintService } from '../../src/application/ShoppingListPrintService.js';
+import { PdfKitShoppingListRenderer } from '../../src/adapters/pdf/PdfKitShoppingListRenderer.js';
 import { ShoppingListItem } from '../../src/domain/ShoppingListItem.js';
 import { InMemoryShoppingListRepository } from '../support/InMemoryShoppingListRepository.js';
 
@@ -13,7 +15,12 @@ class RestControllerFixture {
   ]);
   readonly controller = new RestApiController(
     new ShoppingListService(this.repository),
-    new RestBearerAuthenticator('rest-secret')
+    new RestBearerAuthenticator('rest-secret'),
+    new ShoppingListPrintService(
+      new ShoppingListService(this.repository),
+      new PdfKitShoppingListRenderer(),
+      () => new Date('2026-08-17T08:30:00.000Z')
+    )
   );
 
   request(overrides: Partial<RestRequest>): RestRequest {
@@ -45,7 +52,10 @@ describe('RestApiController', () => {
       const fixture = new RestControllerFixture();
       const response = await fixture.controller.handle(fixture.request({ path: '/version' }));
       expect(JSON.parse(response.body).data).toEqual({
-        schemaVersion: 1, component: 'lists-service', version: '0.2.0', revision: 'lists-test-revision'
+        schemaVersion: 1,
+        component: 'lists-service',
+        version: '0.3.0',
+        revision: 'lists-test-revision'
       });
     } finally {
       if (previous === undefined) delete process.env['LIFE2_RELEASE_REVISION'];
@@ -80,6 +90,28 @@ describe('RestApiController', () => {
       data: [expect.objectContaining({ id: '1', content: 'milk', isCompleted: false })],
       meta: { requestId: 'request-1', count: 1 }
     });
+  });
+
+  it('returns the current active list as a downloadable PDF', async () => {
+    const fixture = new RestControllerFixture();
+
+    const response = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/items.pdf',
+        method: 'GET',
+        headers: { authorization: 'Bearer rest-secret' }
+      })
+    );
+
+    const pdf = Buffer.from(response.body, 'base64');
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toBe('application/pdf');
+    expect(response.headers['content-disposition']).toBe(
+      'attachment; filename="shopping-list.pdf"'
+    );
+    expect(response.isBase64Encoded).toBe(true);
+    expect(pdf.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+    expect(pdf.subarray(-6).toString('ascii')).toContain('%%EOF');
   });
 
   it('returns 201 for a new item and 200 for an exact duplicate', async () => {

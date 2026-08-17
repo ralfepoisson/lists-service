@@ -1,4 +1,5 @@
 import type { ShoppingListService } from '../../application/ShoppingListService.js';
+import type { ShoppingListPrintService } from '../../application/ShoppingListPrintService.js';
 import type { ItemStatus } from '../../application/ports/ShoppingListRepository.js';
 import { ApplicationError, RouteNotFoundError, ValidationError } from '../../domain/errors.js';
 import type { RestAuthenticator } from './RestBearerAuthenticator.js';
@@ -17,12 +18,14 @@ export interface RestResponse {
   readonly statusCode: number;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: string;
+  readonly isBase64Encoded?: boolean;
 }
 
 export class RestApiController {
   constructor(
     private readonly service: ShoppingListService,
-    private readonly authenticator: RestAuthenticator
+    private readonly authenticator: RestAuthenticator,
+    private readonly printService: ShoppingListPrintService
   ) {}
 
   async handle(request: RestRequest): Promise<RestResponse> {
@@ -31,15 +34,19 @@ export class RestApiController {
         return this.success(200, { status: 'ok' }, request.requestId);
       }
       if (request.method === 'GET' && request.path === '/version') {
-        return this.success(200, {
-          schemaVersion: 1,
-          component: 'lists-service',
-          version: packageJson.version,
-          revision:
-            process.env['LIFE2_RELEASE_REVISION'] ??
-            process.env['RELEASE_GIT_COMMIT'] ??
-            'development'
-        }, request.requestId);
+        return this.success(
+          200,
+          {
+            schemaVersion: 1,
+            component: 'lists-service',
+            version: packageJson.version,
+            revision:
+              process.env['LIFE2_RELEASE_REVISION'] ??
+              process.env['RELEASE_GIT_COMMIT'] ??
+              'development'
+          },
+          request.requestId
+        );
       }
       if (!this.authenticator.isAuthenticated(request.headers['authorization'])) {
         return this.error(
@@ -71,6 +78,19 @@ export class RestApiController {
         { status: isReady ? 'ready' : 'not_ready' },
         request.requestId
       );
+    }
+    if (request.path === '/v1/items.pdf' && request.method === 'GET') {
+      const document = await this.printService.generate();
+      return {
+        statusCode: 200,
+        headers: {
+          'content-type': 'application/pdf',
+          'content-disposition': `attachment; filename="${document.filename}"`,
+          'cache-control': 'no-store'
+        },
+        body: document.bytes.toString('base64'),
+        isBase64Encoded: true
+      };
     }
     if (request.path === '/v1/items' && request.method === 'GET') {
       const status = this.parseStatus(request.query['status']);

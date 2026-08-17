@@ -32,9 +32,9 @@ for the `active` alias. The raw API Gateway endpoint is disabled.
 
 ## Scope
 
-The service repository itself deliberately excludes printing and an owned
-web/mobile UI. The separate Life2 webapp now consumes its REST contract. Version
-1 still excludes Alexa's built-in
+The service repository includes authenticated transient PDF rendering but
+deliberately excludes an owned web/mobile UI. The separate Life2 webapp consumes
+its REST and PDF contracts. Version 1 still excludes Alexa's built-in
 shopping list, deprecated Alexa List Management APIs, account linking,
 multi-household tenancy, LLM matching, product lookup, purchasing, scanning,
 meal planning, and inventory management.

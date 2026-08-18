@@ -33,6 +33,10 @@ export class TodoistClient {
     );
   }
 
+  async postForm(path: string, body: Readonly<Record<string, string>>): Promise<unknown> {
+    return this.requestJson('POST', path, new URLSearchParams(body).toString(), false, true);
+  }
+
   async delete(path: string): Promise<void> {
     await this.requestEmpty('DELETE', path);
   }
@@ -41,9 +45,10 @@ export class TodoistClient {
     method: 'GET' | 'POST',
     path: string,
     body?: string,
-    allowRetry = true
+    allowRetry = true,
+    isForm = false
   ): Promise<unknown> {
-    const response = await this.sendWithPolicy(method, path, body, allowRetry);
+    const response = await this.sendWithPolicy(method, path, body, allowRetry, isForm);
     if (response.status === 204 || response.headers.get('content-length') === '0') {
       return null;
     }
@@ -69,13 +74,16 @@ export class TodoistClient {
     method: 'DELETE' | 'GET' | 'POST',
     path: string,
     body: string | undefined,
-    allowRetry: boolean
+    allowRetry: boolean,
+    isForm = false
   ): Promise<Response> {
     const attempts = allowRetry ? this.options.maximumAttempts : 1;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       let response: Response;
       try {
-        response = await this.options.transport.send(this.createRequest(method, path, body));
+        response = await this.options.transport.send(
+          this.createRequest(method, path, body, isForm)
+        );
       } catch (error: unknown) {
         if (allowRetry && attempt < attempts) {
           await this.options.sleeper.sleep(this.backoffMilliseconds(attempt));
@@ -104,7 +112,8 @@ export class TodoistClient {
   private createRequest(
     method: 'DELETE' | 'GET' | 'POST',
     path: string,
-    body: string | undefined
+    body: string | undefined,
+    isForm = false
   ): HttpRequest {
     const headers: Record<string, string> = {
       Accept: 'application/json',
@@ -112,7 +121,7 @@ export class TodoistClient {
       'User-Agent': 'Life2-Lists-Service/0.1'
     };
     if (body !== undefined) {
-      headers['Content-Type'] = 'application/json';
+      headers['Content-Type'] = isForm ? 'application/x-www-form-urlencoded' : 'application/json';
     }
     return {
       url: `${this.options.baseUrl.replace(/\/$/u, '')}${path}`,

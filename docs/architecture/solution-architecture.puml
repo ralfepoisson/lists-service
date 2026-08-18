@@ -41,9 +41,9 @@ cloud "AWS" {
   }
 
   package "Shared application package" as Application {
-    component "Shopping-list use-case objects" as UseCases
+    component "Shopping-list + task-list\nuse-case objects" as UseCases
     component "ShoppingListPrintService\ntransient active-list snapshot" as PrintUseCase
-    interface "ShoppingListRepository" as RepositoryPort
+    interface "ShoppingListRepository +\nTaskListRepository" as RepositoryPort
     interface "ShoppingListPdfRenderer" as PdfPort
   }
 
@@ -55,7 +55,7 @@ cloud "AWS" {
   }
 
   package "Shared infrastructure adapters" as Infrastructure {
-    component "TodoistShoppingListRepository" as TodoistRepository
+    component "Todoist shopping + named-list\nrepository adapters" as TodoistRepository
     component "TodoistProjectResolver\nresolve or create once" as ProjectResolver
     component "Typed Todoist client\n(timeout, pagination, retry)" as TodoistClient
     component "Secret provider strategy\nAWS or read-only file" as SecretProvider
@@ -72,7 +72,7 @@ component "Local REST composition\nfile secrets only" as LocalComposition
 
 cloud "Todoist" {
   component "Official Todoist REST API" as TodoistApi
-  database "Dedicated shopping-list project\n(system of record)" as TodoistProject
+  database "Configured Lists project\nroot shopping tasks + named-list sections" as TodoistProject
 }
 
 Household --> Alexa

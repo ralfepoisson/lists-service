@@ -8,8 +8,10 @@ import { TimerSleeper } from '../adapters/todoist/ports/Sleeper.js';
 import { TodoistClient } from '../adapters/todoist/TodoistClient.js';
 import { TodoistProjectResolver } from '../adapters/todoist/TodoistProjectResolver.js';
 import { TodoistShoppingListRepository } from '../adapters/todoist/TodoistShoppingListRepository.js';
+import { TodoistTaskListRepository } from '../adapters/todoist/TodoistTaskListRepository.js';
 import { ShoppingListService } from '../application/ShoppingListService.js';
 import { ShoppingListPrintService } from '../application/ShoppingListPrintService.js';
+import { TaskListService } from '../application/TaskListService.js';
 import type { SecretProvider } from '../application/ports/SecretProvider.js';
 import type { AppConfig } from '../config/AppConfig.js';
 
@@ -20,6 +22,13 @@ export class ShoppingListServiceFactory {
   ) {}
 
   async create(): Promise<ShoppingListService> {
+    return (await this.createServices()).shoppingListService;
+  }
+
+  async createServices(): Promise<{
+    readonly shoppingListService: ShoppingListService;
+    readonly taskListService: TaskListService;
+  }> {
     const todoistToken = await this.secrets.getSecret(this.config.todoistTokenSecretArn);
     const todoistClient = new TodoistClient({
       baseUrl: this.config.todoistApiBaseUrl,
@@ -34,9 +43,18 @@ export class ShoppingListServiceFactory {
       (await new TodoistProjectResolver(todoistClient).resolveOrCreate(
         this.config.todoistProjectName as string
       ));
-    return new ShoppingListService(
-      new TodoistShoppingListRepository(todoistClient, projectId, this.config.completedLookbackDays)
-    );
+    return {
+      shoppingListService: new ShoppingListService(
+        new TodoistShoppingListRepository(
+          todoistClient,
+          projectId,
+          this.config.completedLookbackDays
+        )
+      ),
+      taskListService: new TaskListService(
+        new TodoistTaskListRepository(todoistClient, projectId, this.config.completedLookbackDays)
+      )
+    };
   }
 }
 
@@ -48,18 +66,19 @@ export class RestControllerFactory {
 
   async create(): Promise<RestApiController> {
     const security = this.config.restSecurityConfiguration();
-    const [service, restToken, life2SigningKey] = await Promise.all([
-      new ShoppingListServiceFactory(this.config, this.secrets).create(),
+    const [services, restToken, life2SigningKey] = await Promise.all([
+      new ShoppingListServiceFactory(this.config, this.secrets).createServices(),
       this.secrets.getSecret(security.restApiTokenSecretArn),
       this.secrets.getSecret(security.life2JwtSigningKeySecretArn)
     ]);
     return new RestApiController(
-      service,
+      services.shoppingListService,
       new CompositeRestAuthenticator([
         new RestBearerAuthenticator(restToken),
         new Life2JwtRestAuthenticator(life2SigningKey, security.life2AllowedAccountId)
       ]),
-      new ShoppingListPrintService(service, new PdfKitShoppingListRenderer())
+      new ShoppingListPrintService(services.shoppingListService, new PdfKitShoppingListRenderer()),
+      services.taskListService
     );
   }
 }

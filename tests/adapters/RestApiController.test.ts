@@ -3,16 +3,19 @@ import { describe, expect, it } from 'vitest';
 import { RestApiController, type RestRequest } from '../../src/adapters/rest/RestApiController.js';
 import { RestBearerAuthenticator } from '../../src/adapters/rest/RestBearerAuthenticator.js';
 import { ShoppingListService } from '../../src/application/ShoppingListService.js';
+import { TaskListService } from '../../src/application/TaskListService.js';
 import { ShoppingListPrintService } from '../../src/application/ShoppingListPrintService.js';
 import { PdfKitShoppingListRenderer } from '../../src/adapters/pdf/PdfKitShoppingListRenderer.js';
 import { ShoppingListItem } from '../../src/domain/ShoppingListItem.js';
 import { InMemoryShoppingListRepository } from '../support/InMemoryShoppingListRepository.js';
+import { InMemoryTaskListRepository } from '../support/InMemoryTaskListRepository.js';
 
 class RestControllerFixture {
   readonly repository = new InMemoryShoppingListRepository([
     new ShoppingListItem('1', 'milk', false),
     new ShoppingListItem('2', 'bread', true)
   ]);
+  readonly taskListRepository = new InMemoryTaskListRepository();
   readonly controller = new RestApiController(
     new ShoppingListService(this.repository),
     new RestBearerAuthenticator('rest-secret'),
@@ -20,7 +23,8 @@ class RestControllerFixture {
       new ShoppingListService(this.repository),
       new PdfKitShoppingListRenderer(),
       () => new Date('2026-08-17T08:30:00.000Z')
-    )
+    ),
+    new TaskListService(this.taskListRepository)
   );
 
   request(overrides: Partial<RestRequest>): RestRequest {
@@ -54,7 +58,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body).data).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.3.1',
+        version: '0.4.0',
         revision: 'lists-test-revision'
       });
     } finally {
@@ -188,6 +192,111 @@ describe('RestApiController', () => {
     expect(fixture.repository.completedIds).toEqual(['1']);
     expect(fixture.repository.reopenedIds).toEqual(['1']);
     expect(fixture.repository.deletedIds).toEqual(['1']);
+  });
+
+  it('creates and lists named task lists', async () => {
+    const fixture = new RestControllerFixture();
+    const headers = { authorization: 'Bearer rest-secret' };
+
+    const created = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/task-lists',
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: 'Errands' })
+      })
+    );
+    const listed = await fixture.controller.handle(
+      fixture.request({ path: '/v1/task-lists', method: 'GET', headers })
+    );
+
+    expect(created.statusCode).toBe(201);
+    expect(JSON.parse(created.body).data).toMatchObject({ name: 'Errands' });
+    expect(JSON.parse(listed.body).meta.count).toBe(2);
+  });
+
+  it('supports nested task create, edit, complete, delete, and list routes', async () => {
+    const fixture = new RestControllerFixture();
+    const headers = { authorization: 'Bearer rest-secret' };
+
+    const created = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/task-lists/list-1/tasks',
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ content: 'Tea' })
+      })
+    );
+    const updated = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/task-lists/list-1/tasks/task-1',
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ content: 'Oat milk' })
+      })
+    );
+    await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/task-lists/list-1/tasks/task-1/complete',
+        method: 'POST',
+        headers
+      })
+    );
+    await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/task-lists/list-1/tasks/task-2',
+        method: 'DELETE',
+        headers
+      })
+    );
+    const listed = await fixture.controller.handle(
+      fixture.request({ path: '/v1/task-lists/list-1/tasks', method: 'GET', headers })
+    );
+
+    expect(created.statusCode).toBe(201);
+    expect(JSON.parse(updated.body).data).toMatchObject({ content: 'Oat milk', position: 1 });
+    expect(fixture.taskListRepository.completedIds).toContain('task-1');
+    expect(fixture.taskListRepository.deletedIds).toEqual(['task-2']);
+    expect(JSON.parse(listed.body).meta.count).toBe(3);
+  });
+
+  it('reorders only with a strict taskIds body', async () => {
+    const fixture = new RestControllerFixture();
+    const response = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/task-lists/list-1/tasks/order',
+        method: 'PUT',
+        headers: { authorization: 'Bearer rest-secret' },
+        body: JSON.stringify({ taskIds: ['task-2', 'task-1'] })
+      })
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(fixture.taskListRepository.reordered).toEqual([
+      { id: 'task-2', position: 1 },
+      { id: 'task-1', position: 2 }
+    ]);
+  });
+
+  it('completes active tasks and archives a list only with destructive confirmation', async () => {
+    const fixture = new RestControllerFixture();
+    const headers = { authorization: 'Bearer rest-secret' };
+
+    const rejected = await fixture.controller.handle(
+      fixture.request({ path: '/v1/task-lists/list-1', method: 'DELETE', headers })
+    );
+    const deleted = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/task-lists/list-1',
+        method: 'DELETE',
+        headers: { ...headers, 'x-confirm-destructive-action': 'true' }
+      })
+    );
+
+    expect(rejected.statusCode).toBe(400);
+    expect(deleted.statusCode).toBe(200);
+    expect(JSON.parse(deleted.body).data).toEqual({ deleted: true, completedCount: 2 });
+    expect(fixture.taskListRepository.archivedIds).toEqual(['list-1']);
   });
 
   it('serves authenticated readiness', async () => {

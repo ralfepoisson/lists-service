@@ -4,6 +4,8 @@ export type ApplicationErrorCode =
   | 'CONFIGURATION_ERROR'
   | 'DESTRUCTIVE_ACTION_NOT_CONFIRMED'
   | 'ITEM_NOT_FOUND'
+  | 'TASK_LIST_NOT_FOUND'
+  | 'TASK_NOT_FOUND'
   | 'ROUTE_NOT_FOUND'
   | 'UPSTREAM_AUTHENTICATION_FAILED'
   | 'UPSTREAM_RATE_LIMITED'
@@ -30,6 +32,18 @@ export class ValidationError extends ApplicationError {
 export class ItemNotFoundError extends ApplicationError {
   constructor() {
     super('ITEM_NOT_FOUND', 'The requested shopping-list item was not found.', 404);
+  }
+}
+
+export class TaskListNotFoundError extends ApplicationError {
+  constructor() {
+    super('TASK_LIST_NOT_FOUND', 'The requested task list was not found.', 404);
+  }
+}
+
+export class TaskNotFoundError extends ApplicationError {
+  constructor() {
+    super('TASK_NOT_FOUND', 'The requested task was not found in that task list.', 404);
   }
 }
 

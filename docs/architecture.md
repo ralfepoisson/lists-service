@@ -23,9 +23,10 @@ The logical provider-backed data model is visualized in
 - an Alexa custom skill for voice operations; and
 - an authenticated REST API for the Life2 webapp and personal automations.
 
-Todoist is the sole system of record. Each active task in one configured Todoist
-project represents an active shopping-list item. Todoist's native completion
-state represents a purchased/completed item. No application database or native
+Todoist is the sole system of record. Root tasks in the configured project retain
+the legacy shopping-list contract. Todoist sections model named Life2 task lists,
+and section tasks carry list membership and provider order. Todoist's native
+completion state represents a completed item. No application database or native
 Alexa-list synchronization is proposed.
 
 ## Runtime structure

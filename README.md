@@ -4,8 +4,10 @@ Public `GET /version` publishes schema version `1`, the SemVer from
 `package.json`, and the immutable Lambda/container release revision without
 requiring Todoist access or authentication.
 
-`lists-service` is a private, single-household shopping-list service. Todoist is
-the sole system of record. The same object-oriented application service powers:
+`lists-service` is a private, single-household shopping-list and named task-list
+service. Todoist is the sole system of record. The configured project remains
+the service container: legacy shopping items are root tasks, while named task
+lists are Todoist sections. The same object-oriented application layer powers:
 
 - an authenticated REST API for the Life2 webapp and personal automations; and
 - an `en-GB` Alexa custom skill for adding, reading, removing, completing, and
@@ -115,6 +117,12 @@ The implementation uses the current unified Todoist API v1 at
 `https://api.todoist.com/api/v1`, bearer authentication, cursor pagination,
 `POST /tasks/{id}/close`, `POST /tasks/{id}/reopen`, and bounded completed
 history. See [Todoist contract notes](docs/api.md#todoist-provider-contract).
+
+Authenticated `/v1/task-lists` operations create named lists and let callers
+list, add, edit, remove, complete, and reorder their tasks. Deleting a list
+requires explicit destructive confirmation, completes all remaining active
+tasks, and archives the section only after every completion succeeds. It does
+not invoke Todoist's destructive section-delete operation.
 
 ## AWS secrets
 

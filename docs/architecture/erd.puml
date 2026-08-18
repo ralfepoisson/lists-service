@@ -17,13 +17,23 @@ entity "Todoist Project" as Project {
   name : string
 }
 
+entity "Todoist Section / TaskList" as TaskList {
+  * id : string <<provider identity>>
+  --
+  * projectId : string <<provider reference>>
+  * name : string
+  isArchived : boolean
+}
+
 entity "Todoist Task / ShoppingListItem" as Item {
   * id : string <<provider identity>>
   --
   * projectId : string <<provider reference>>
+  sectionId : string [0..1] <<provider reference>>
   * content : string
   description : string [0..1]
   * isCompleted : boolean
+  childOrder : integer
   createdAt : timestamp [0..1]
   completedAt : timestamp [0..1]
 }
@@ -45,6 +55,8 @@ entity "Runtime Configuration" as Configuration {
 }
 
 Project ||--o{ Item : contains
+Project ||--o{ TaskList : contains named lists
+TaskList ||--o{ Item : scopes named-list tasks
 Configuration ..> Project : selects exactly one
 
 note right of Configuration

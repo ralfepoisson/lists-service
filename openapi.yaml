@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Life2 Lists Service REST API
-  version: 0.3.1
+  version: 0.4.0
   description: |
     Authenticated REST access to the private Todoist-backed Life2 shopping list.
     Todoist remains the system of record. Except for `GET /health`, callers must
@@ -25,6 +25,8 @@ tags:
     description: Liveness and authenticated dependency-readiness operations.
   - name: Items
     description: Shopping-list query and mutation operations.
+  - name: Task Lists
+    description: Named task lists and their ordered tasks.
 security:
   - bearerAuth: []
 paths:
@@ -93,6 +95,182 @@ paths:
                   - $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /v1/task-lists:
+    get:
+      operationId: listTaskLists
+      summary: List named task lists
+      tags: [Task Lists]
+      responses:
+        '200':
+          description: Active task lists backed by sections in the configured Todoist project.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskListListResponse' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
+    post:
+      operationId: createTaskList
+      summary: Create a named task list
+      tags: [Task Lists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTaskListRequest' }
+      responses:
+        '201':
+          description: Task list created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskListResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
+  /v1/task-lists/{listId}:
+    parameters:
+      - $ref: '#/components/parameters/ListId'
+    delete:
+      operationId: deleteTaskList
+      summary: Complete remaining tasks and archive the task list
+      description: Closes every active task before archiving the backing Todoist section. The section is not archived if any close fails.
+      tags: [Task Lists]
+      parameters:
+        - $ref: '#/components/parameters/DestructiveConfirmation'
+      responses:
+        '200':
+          description: Remaining tasks completed and list archived.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeleteTaskListResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
+  /v1/task-lists/{listId}/tasks:
+    parameters:
+      - $ref: '#/components/parameters/ListId'
+    get:
+      operationId: listTaskListTasks
+      summary: List tasks in one named list
+      tags: [Task Lists]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, completed, all], default: active }
+      responses:
+        '200':
+          description: Scoped tasks ordered by provider position.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskListTaskListResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
+    post:
+      operationId: createTaskListTask
+      summary: Add a task to one named list
+      tags: [Task Lists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskContentRequest' }
+      responses:
+        '201':
+          description: Task created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskListTaskResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
+  /v1/task-lists/{listId}/tasks/order:
+    parameters:
+      - $ref: '#/components/parameters/ListId'
+    put:
+      operationId: reorderTaskListTasks
+      summary: Replace the active task order
+      description: taskIds must be an exact, duplicate-free permutation of every active task in the list.
+      tags: [Task Lists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReorderTasksRequest' }
+      responses:
+        '200':
+          description: Order updated through one Todoist item_reorder sync command.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReorderTasksResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
+  /v1/task-lists/{listId}/tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/ListId'
+      - $ref: '#/components/parameters/TaskId'
+    patch:
+      operationId: updateTaskListTask
+      summary: Edit task content
+      tags: [Task Lists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskContentRequest' }
+      responses:
+        '200':
+          description: Task updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskListTaskResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
+    delete:
+      operationId: deleteTaskListTask
+      summary: Permanently remove a task
+      tags: [Task Lists]
+      responses:
+        '200':
+          description: Task deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeleteItemResponse' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
+  /v1/task-lists/{listId}/tasks/{taskId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/ListId'
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      operationId: completeTaskListTask
+      summary: Mark a task done
+      tags: [Task Lists]
+      responses:
+        '200':
+          description: Task completed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompleteItemResponse' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
   /v1/items:
     get:
       operationId: listItems
@@ -293,6 +471,18 @@ components:
       bearerFormat: opaque-or-Life2-JWT
       description: Strong opaque automation token or verified, account-allowed Life2 JWT.
   parameters:
+    ListId:
+      name: listId
+      in: path
+      required: true
+      description: Todoist section identifier inside the configured project.
+      schema: { type: string, minLength: 1 }
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      description: Todoist task identifier scoped to the requested task list.
+      schema: { type: string, minLength: 1 }
     ItemId:
       name: itemId
       in: path
@@ -369,6 +559,44 @@ components:
         completedAt:
           type: string
           format: date-time
+    TaskList:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 128 }
+    TaskListTask:
+      type: object
+      additionalProperties: false
+      required: [id, listId, content, isCompleted, position]
+      properties:
+        id: { type: string }
+        listId: { type: string }
+        content: { type: string, minLength: 1, maxLength: 500 }
+        isCompleted: { type: boolean }
+        position: { type: integer, minimum: 1 }
+    CreateTaskListRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+    TaskContentRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 500 }
+    ReorderTasksRequest:
+      type: object
+      additionalProperties: false
+      required: [taskIds]
+      properties:
+        taskIds:
+          type: array
+          uniqueItems: true
+          items: { type: string, minLength: 1 }
     AddItemRequest:
       type: object
       additionalProperties: false
@@ -508,6 +736,71 @@ components:
               const: true
         meta:
           $ref: '#/components/schemas/Meta'
+    TaskListListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/TaskList' } }
+        meta:
+          type: object
+          additionalProperties: false
+          required: [requestId, count]
+          properties:
+            requestId: { type: string }
+            count: { type: integer, minimum: 0 }
+    TaskListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/TaskList' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    TaskListTaskListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/TaskListTask' } }
+        meta:
+          type: object
+          additionalProperties: false
+          required: [requestId, count]
+          properties:
+            requestId: { type: string }
+            count: { type: integer, minimum: 0 }
+    TaskListTaskResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/TaskListTask' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    DeleteTaskListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [deleted, completedCount]
+          properties:
+            deleted: { type: boolean, const: true }
+            completedCount: { type: integer, minimum: 0 }
+        meta: { $ref: '#/components/schemas/Meta' }
+    ReorderTasksResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [reordered]
+          properties:
+            reordered: { type: boolean, const: true }
+        meta: { $ref: '#/components/schemas/Meta' }
     ErrorResponse:
       type: object
       additionalProperties: false
@@ -527,6 +820,8 @@ components:
                 - DESTRUCTIVE_ACTION_NOT_CONFIRMED
                 - INTERNAL_ERROR
                 - ITEM_NOT_FOUND
+                - TASK_LIST_NOT_FOUND
+                - TASK_NOT_FOUND
                 - ROUTE_NOT_FOUND
                 - UPSTREAM_AUTHENTICATION_FAILED
                 - UPSTREAM_RATE_LIMITED

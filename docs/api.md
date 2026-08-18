@@ -20,6 +20,16 @@ verified on 2026-07-31.
 - `DELETE /v1/items?status=completed` deletes all completed tasks returned
   inside the configured rolling history window and requires
   `X-Confirm-Destructive-Action: true`.
+- `GET|POST /v1/task-lists` lists or creates section-backed named lists.
+- `GET|POST /v1/task-lists/{listId}/tasks` lists or creates scoped tasks;
+  `PATCH`, `DELETE`, and `/complete` provide edit, removal, and completion.
+- `PUT /v1/task-lists/{listId}/tasks/order` requires an exact active-task ID
+  permutation and sends one Todoist `item_reorder` sync command.
+- `DELETE /v1/task-lists/{listId}` requires destructive confirmation, closes
+  every active task, and archives the section only after all closes succeed.
+
+Nested mutations verify section-to-configured-project and task-to-section scope.
+Legacy `/v1/items*` behavior remains unchanged.
 
 All protected routes require `Authorization: Bearer <token>`. The token may be
 the configured opaque automation credential or a Life2 JWT. JWT verification

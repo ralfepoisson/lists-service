@@ -2,8 +2,14 @@ import type { ShoppingListService } from '../../application/ShoppingListService.
 import type { ShoppingListPrintService } from '../../application/ShoppingListPrintService.js';
 import type { TaskListService } from '../../application/TaskListService.js';
 import type { ItemStatus } from '../../application/ports/ShoppingListRepository.js';
-import { ApplicationError, RouteNotFoundError, ValidationError } from '../../domain/errors.js';
-import type { RestAuthenticator } from './RestBearerAuthenticator.js';
+import type { TenantTaskListServiceProvider } from '../../application/ports/TenantTaskListServiceProvider.js';
+import {
+  ApplicationError,
+  AuthorizationForbiddenError,
+  RouteNotFoundError,
+  ValidationError
+} from '../../domain/errors.js';
+import type { RestAuthenticator, RestPrincipal } from './RestBearerAuthenticator.js';
 import packageJson from '../../../package.json' with { type: 'json' };
 
 export interface RestRequest {
@@ -27,7 +33,8 @@ export class RestApiController {
     private readonly service: ShoppingListService,
     private readonly authenticator: RestAuthenticator,
     private readonly printService: ShoppingListPrintService,
-    private readonly taskListService: TaskListService
+    private readonly taskListServices: TenantTaskListServiceProvider,
+    private readonly legacyOwnerAccountId: string
   ) {}
 
   async handle(request: RestRequest): Promise<RestResponse> {
@@ -50,7 +57,8 @@ export class RestApiController {
           request.requestId
         );
       }
-      if (!this.authenticator.isAuthenticated(request.headers['authorization'])) {
+      const principal = this.authenticator.authenticate(request.headers['authorization']);
+      if (principal === undefined) {
         return this.error(
           401,
           'AUTHENTICATION_REQUIRED',
@@ -58,7 +66,7 @@ export class RestApiController {
           request.requestId
         );
       }
-      return await this.routeAuthenticated(request);
+      return await this.routeAuthenticated(request, principal);
     } catch (error: unknown) {
       if (error instanceof ApplicationError) {
         return this.error(error.httpStatus, error.code, error.message, request.requestId);
@@ -72,7 +80,10 @@ export class RestApiController {
     }
   }
 
-  private async routeAuthenticated(request: RestRequest): Promise<RestResponse> {
+  private async routeAuthenticated(
+    request: RestRequest,
+    principal: RestPrincipal
+  ): Promise<RestResponse> {
     if (request.method === 'GET' && request.path === '/health/ready') {
       const isReady = await this.service.isReady();
       return this.success(
@@ -81,7 +92,28 @@ export class RestApiController {
         request.requestId
       );
     }
+    if (request.path === '/v1/todoist/connection' && request.method === 'GET') {
+      const life2Principal = this.requireLife2Principal(principal);
+      return this.success(
+        200,
+        await this.taskListServices.connectionStatus(life2Principal.accountId),
+        request.requestId
+      );
+    }
+    if (request.path === '/v1/todoist/connection/authorizations' && request.method === 'POST') {
+      this.requireLife2Principal(principal);
+      throw new AuthorizationForbiddenError(
+        'Todoist connections are provisioned through the server-side tenant connection catalogue.'
+      );
+    }
+    if (request.path === '/v1/todoist/connection' && request.method === 'DELETE') {
+      this.requireLife2Principal(principal);
+      throw new AuthorizationForbiddenError(
+        'Todoist connections are managed through the server-side tenant connection catalogue.'
+      );
+    }
     if (request.path === '/v1/items.pdf' && request.method === 'GET') {
+      this.requireLegacyAccess(principal);
       const document = await this.printService.generate();
       return {
         statusCode: 200,
@@ -95,11 +127,13 @@ export class RestApiController {
       };
     }
     if (request.path === '/v1/items' && request.method === 'GET') {
+      this.requireLegacyAccess(principal);
       const status = this.parseStatus(request.query['status']);
       const items = await this.service.list(status);
       return this.success(200, items, request.requestId, { count: items.length });
     }
     if (request.path === '/v1/items' && request.method === 'POST') {
+      this.requireLegacyAccess(principal);
       const content = this.parseAddBody(request.body);
       const result = await this.service.add(content);
       return this.success(result.alreadyExists ? 200 : 201, result.item, request.requestId, {
@@ -111,17 +145,23 @@ export class RestApiController {
       request.method === 'DELETE' &&
       request.query['status'] === 'completed'
     ) {
+      this.requireLegacyAccess(principal);
       const isConfirmed =
         request.headers['x-confirm-destructive-action']?.toLocaleLowerCase('en-GB') === 'true';
       const deletedCount = await this.service.clearCompleted(isConfirmed);
       return this.success(200, { deletedCount }, request.requestId);
     }
     if (request.path === '/v1/task-lists' || request.path.startsWith('/v1/task-lists/')) {
-      return this.routeTaskLists(request);
+      const life2Principal = this.requireLife2Principal(principal);
+      return this.routeTaskLists(
+        request,
+        await this.taskListServices.forTenant(life2Principal.accountId)
+      );
     }
 
     const itemRoute = /^\/v1\/items\/([^/]+?)(?:\/(complete|reopen))?$/u.exec(request.path);
     if (itemRoute !== null) {
+      this.requireLegacyAccess(principal);
       const itemId = decodeURIComponent(itemRoute[1] as string);
       const action = itemRoute[2];
       if (request.method === 'DELETE' && action === undefined) {
@@ -140,13 +180,16 @@ export class RestApiController {
     throw new RouteNotFoundError();
   }
 
-  private async routeTaskLists(request: RestRequest): Promise<RestResponse> {
+  private async routeTaskLists(
+    request: RestRequest,
+    taskListService: TaskListService
+  ): Promise<RestResponse> {
     if (request.path === '/v1/task-lists' && request.method === 'GET') {
-      const lists = await this.taskListService.listTaskLists();
+      const lists = await taskListService.listTaskLists();
       return this.success(200, lists, request.requestId, { count: lists.length });
     }
     if (request.path === '/v1/task-lists' && request.method === 'POST') {
-      const list = await this.taskListService.createTaskList(
+      const list = await taskListService.createTaskList(
         this.parseSingleStringBody(request.body, 'name')
       );
       return this.success(201, list, request.requestId);
@@ -157,7 +200,7 @@ export class RestApiController {
       const listId = decodeURIComponent(listRoute[1] as string);
       const isConfirmed =
         request.headers['x-confirm-destructive-action']?.toLocaleLowerCase('en-GB') === 'true';
-      const result = await this.taskListService.deleteTaskList(listId, isConfirmed);
+      const result = await taskListService.deleteTaskList(listId, isConfirmed);
       return this.success(
         200,
         { deleted: true, completedCount: result.completedCount },
@@ -169,14 +212,14 @@ export class RestApiController {
     if (tasksRoute !== null) {
       const listId = decodeURIComponent(tasksRoute[1] as string);
       if (request.method === 'GET') {
-        const tasks = await this.taskListService.listTasks(
+        const tasks = await taskListService.listTasks(
           listId,
           this.parseStatus(request.query['status'])
         );
         return this.success(200, tasks, request.requestId, { count: tasks.length });
       }
       if (request.method === 'POST') {
-        const task = await this.taskListService.createTask(
+        const task = await taskListService.createTask(
           listId,
           this.parseSingleStringBody(request.body, 'content')
         );
@@ -187,7 +230,7 @@ export class RestApiController {
     const orderRoute = /^\/v1\/task-lists\/([^/]+)\/tasks\/order$/u.exec(request.path);
     if (orderRoute !== null && request.method === 'PUT') {
       const listId = decodeURIComponent(orderRoute[1] as string);
-      await this.taskListService.reorderTasks(listId, this.parseTaskOrderBody(request.body));
+      await taskListService.reorderTasks(listId, this.parseTaskOrderBody(request.body));
       return this.success(200, { reordered: true }, request.requestId);
     }
 
@@ -199,7 +242,7 @@ export class RestApiController {
       const taskId = decodeURIComponent(taskRoute[2] as string);
       const action = taskRoute[3];
       if (request.method === 'PATCH' && action === undefined) {
-        const task = await this.taskListService.updateTask(
+        const task = await taskListService.updateTask(
           listId,
           taskId,
           this.parseSingleStringBody(request.body, 'content')
@@ -207,15 +250,28 @@ export class RestApiController {
         return this.success(200, task, request.requestId);
       }
       if (request.method === 'DELETE' && action === undefined) {
-        await this.taskListService.deleteTask(listId, taskId);
+        await taskListService.deleteTask(listId, taskId);
         return this.success(200, { deleted: true }, request.requestId);
       }
       if (request.method === 'POST' && action === 'complete') {
-        await this.taskListService.completeTask(listId, taskId);
+        await taskListService.completeTask(listId, taskId);
         return this.success(200, { completed: true }, request.requestId);
       }
     }
     throw new RouteNotFoundError();
+  }
+
+  private requireLife2Principal(
+    principal: RestPrincipal
+  ): Extract<RestPrincipal, { authMethod: 'life2' }> {
+    if (principal.authMethod !== 'life2') throw new AuthorizationForbiddenError();
+    return principal;
+  }
+
+  private requireLegacyAccess(principal: RestPrincipal): void {
+    if (principal.authMethod === 'life2' && principal.accountId !== this.legacyOwnerAccountId) {
+      throw new AuthorizationForbiddenError();
+    }
   }
 
   private parseStatus(value: string | undefined): ItemStatus {

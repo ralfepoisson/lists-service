@@ -18,16 +18,18 @@ The logical provider-backed data model is visualized in
 
 ## Context
 
-`lists-service` provides two private channels over one household shopping list:
+`lists-service` provides a legacy private Shopping channel and multitenant REST
+Task Lists:
 
 - an Alexa custom skill for voice operations; and
-- an authenticated REST API for the Life2 webapp and personal automations.
+- an authenticated REST API for the Life2 webapp and legacy personal automations.
 
-Todoist is the sole system of record. Root tasks in the configured project retain
-the legacy shopping-list contract. Todoist sections model named Life2 task lists,
-and section tasks carry list membership and provider order. Todoist's native
-completion state represents a completed item. No application database or native
-Alexa-list synchronization is proposed.
+Todoist is the sole system of record. The configured owner project retains the
+legacy Shopping/Alexa contract. Separately, each verified Life2 `accountId` may
+have one entry in a protected tenant connection catalogue; the entry contains
+only a reference to that tenant's separately protected Todoist token. Every
+Todoist project visible to that token is a Task List. No application database,
+shadow list, OAuth flow, or native Alexa-list synchronization is introduced.
 
 ## Runtime structure
 
@@ -40,9 +42,10 @@ Two Lambda entry points provide explicit channel separation:
    translates intents/dialog state, invokes the same application use cases, and
    renders concise speech.
 
-Both composition roots construct shared domain/application objects and the same
-Todoist-backed repository adapter. This choice is recorded in
-[ADR 0001](decisions/0001-separate-lambda-entry-points.md).
+Both composition roots share domain and provider transport objects while
+retaining distinct identity boundaries. This choice is recorded in
+[ADR 0001](decisions/0001-separate-lambda-entry-points.md); the Task Lists
+tenant/project model is recorded in [ADR 0005](decisions/0005-tenant-todoist-projects-as-task-lists.md).
 
 When configuration supplies only `TODOIST_PROJECT_NAME`, composition uses the
 `TodoistProjectResolver` as a provisioner: it reuses one exact project, creates
@@ -50,17 +53,12 @@ one if none exists, and refuses multiple exact matches. The resulting stable ID
 is injected into the repository, so item operations never search projects.
 
 ```text
-Alexa custom skill ---> Alexa Lambda adapter --\
-                                                 > Shared use-case objects
-API Gateway HTTP API -> REST Lambda adapter ----/          |
-                                                            v
-                                             ShoppingListRepository port
-                                                            |
-                                                            v
-                                         Todoist repository + typed client
-                                                            |
-                                                            v
-                                                Official Todoist REST API
+Alexa/static automation -> legacy owner token/project -> ShoppingListService
+
+Life2 JWT -> verified accountId -> protected tenant catalogue
+                                  -> referenced Todoist token secret
+                                  -> request-scoped TaskListService
+                                  -> all Todoist projects visible to that token
 ```
 
 ## Object boundaries
@@ -70,7 +68,7 @@ API Gateway HTTP API -> REST Lambda adapter ----/          |
 The domain owns shopping-list concepts and deterministic policy without knowing
 about Lambda, Alexa, API Gateway, Secrets Manager, or Todoist transport:
 
-- `ShoppingListItem` entity/read model;
+- `ShoppingListItem`, `TaskList`, and ordered `TaskListTask` read models;
 - normalized item-content value object;
 - deterministic matcher and match-result types;
 - domain/application error types.
@@ -85,17 +83,25 @@ Use-case objects coordinate behavior through narrow ports:
 - complete item;
 - reopen item where the current provider contract supports it;
 - clear completed items with explicit confirmation;
+- enumerate/create/archive tenant Todoist projects as Task Lists;
+- manage and reorder tasks inside a selected project;
+- report credential-free tenant connection status; and
 - check readiness.
 
-The principal outbound port is `ShoppingListRepository`. Replaceable security,
+The principal outbound ports are `ShoppingListRepository`, `TaskListRepository`,
+and `TenantTaskListServiceProvider`. Replaceable security,
 secret, identity-resolution, logging, clock, and delay behavior should also be
 expressed through focused interfaces when necessary for testability and
 separation.
 
 ### Adapters
 
-- `TodoistShoppingListRepository` maps the application port to a typed Todoist
-  client.
+- `TodoistShoppingListRepository` maps legacy Shopping to the configured owner
+  project. `TodoistTaskListRepository` maps projects and their tasks for one
+  already-selected tenant token.
+- `TenantTodoistConnectionCatalog` validates unique `accountId` to
+  `tokenSecretRef` entries, loads no token from the catalogue itself, and fails
+  closed for an unconnected tenant.
 - The typed client centralizes authentication, timeouts, bounded transient
   retries, pagination, response validation, and upstream error translation.
 - REST objects map HTTP input/authentication to use cases and serialize stable
@@ -127,13 +133,28 @@ read-only; source files remain ignored and never enter images or logs.
 
 ## Key flows
 
-### Add item
+### Add legacy Shopping item
 
 1. A channel adapter validates input and creates/propagates a request ID.
 2. The add use case normalizes content and lists active items through the port.
 3. An exact normalized duplicate returns the existing item without mutation.
-4. Otherwise the repository creates a Todoist task in the configured project.
+4. Otherwise the repository creates a Todoist task in the configured legacy
+   Shopping project.
 5. The channel adapter returns either the REST envelope/status or Alexa speech.
+
+### Read tenant Task Lists
+
+1. The REST adapter requires a Life2 JWT principal; static automation is
+   forbidden on Task Lists and connection routes.
+2. The JWT's verified `accountId` is passed to the tenant catalogue. No request
+   field participates in tenant selection.
+3. The catalogue returns the matching token-secret reference or a visible
+   not-connected result; the secret provider loads the token separately.
+4. A request-scoped Todoist client lists all active projects visible to that
+   token and maps each project to one `TaskList`.
+5. Nested task mutations verify the task's `project_id` matches the requested
+   list. Deletion completes active tasks before project archival and refuses
+   Inbox archival.
 
 ### Remove or complete by Alexa text
 
@@ -146,13 +167,14 @@ read-only; source files remain ignored and never enter images or logs.
 ### Authentication and secrets
 
 `GET /health` is public and proves only that the Lambda responds. Other REST
-routes, including readiness, require bearer-token validation. A composite
-authentication strategy accepts either the constant-time opaque automation
-token or a Life2 JWT whose signature, algorithm, issuer, audience, time claims,
-identity claims, and configured account are verified. Runtime secret adapters
-retrieve the REST token, Life2 verification key, and Todoist token from an
-authorized secret store; configuration contains identifiers, not secret
-values. Alexa requests are
+routes, including readiness, require bearer-token validation. Authentication
+returns either a static automation principal or a Life2 principal containing
+verified `accountId`, `sub`, and `email`. Only the Life2 principal can enter
+Task Lists or connection routes. `GET /v1/todoist/connection` returns only
+connection state and `canManageConnection: false`; authorization-start and
+disconnect are deliberately forbidden. Runtime secret adapters retrieve the
+REST token, Life2 verification key, legacy Todoist token, catalogue, and exact
+referenced tenant tokens from authorized stores. Alexa requests are
 checked against the configured skill ID. These mechanisms are implemented and
 locally tested where deterministic; their deployed behavior remains unverified.
 
@@ -161,6 +183,8 @@ locally tested where deterministic; their deployed behavior remains unverified.
 - Internet/API Gateway to REST Lambda
 - Alexa service to Alexa Lambda
 - Lambda runtime to AWS secret store
+- verified Life2 `accountId` to server-side tenant catalogue entry
+- catalogue token reference to a separately protected Todoist secret
 - Lambda runtime to Todoist
 - Runtime logs to CloudWatch
 - Life2 Webapp through the same-origin `/api/lists` proxy to API Gateway
@@ -173,10 +197,11 @@ without exposing credentials.
 
 ## Data ownership
 
-Todoist owns task identity, content, project association, creation timestamps,
-completion state, and any available completion timestamps. The application
-exposes a stable logical representation but does not persist a shadow copy.
-ADR 0002 records the decision.
+Todoist owns project/list identity, task identity and order, content, completion
+state, and available timestamps. Lists persists no shadow copy or database. The
+server-side catalogue is runtime configuration containing tenant identifiers
+and secret references, not provider data or credentials. ADRs 0002 and 0005
+record these boundaries.
 
 ## Architecture verification
 

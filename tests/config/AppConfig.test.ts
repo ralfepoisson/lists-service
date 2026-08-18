@@ -11,6 +11,8 @@ describe('AppConfig', () => {
     LIFE2_JWT_SIGNING_KEY_SECRET_ARN:
       'arn:aws:secretsmanager:eu-west-1:123456789012:secret:life2-jwt',
     LIFE2_ALLOWED_ACCOUNT_ID: 'account-123',
+    TODOIST_TENANT_CATALOG_SECRET_ARN:
+      'arn:aws:secretsmanager:eu-west-1:123456789012:secret:todoist-catalog',
     ALEXA_SKILL_ID: 'amzn1.ask.skill.test',
     LOG_LEVEL: 'info'
   };
@@ -21,6 +23,7 @@ describe('AppConfig', () => {
     expect(config.todoistProjectId).toBe('project-id');
     expect(config.completedLookbackDays).toBe(90);
     expect(config.life2AllowedAccountId).toBe('account-123');
+    expect(config.todoistTenantCatalogSecretArn).toContain('todoist-catalog');
     expect(config.secretProvider).toBe('aws');
   });
 
@@ -45,6 +48,7 @@ describe('AppConfig', () => {
     expect(config.restApiTokenSecretArn).toBeUndefined();
     expect(config.life2JwtSigningKeySecretArn).toBeUndefined();
     expect(config.life2AllowedAccountId).toBeUndefined();
+    expect(config.todoistTenantCatalogSecretArn).toBeUndefined();
   });
 
   it('accepts a project name when an id is not configured', () => {
@@ -90,12 +94,13 @@ describe('AppConfig', () => {
     ).toThrowError(ConfigurationError);
   });
 
-  it.each(['LIFE2_JWT_SIGNING_KEY_SECRET_ARN', 'LIFE2_ALLOWED_ACCOUNT_ID'])(
-    'fails when %s is missing',
-    (name) => {
-      expect(() =>
-        AppConfig.fromRestEnvironment({ ...completeEnvironment, [name]: undefined })
-      ).toThrowError(ConfigurationError);
-    }
-  );
+  it.each([
+    'LIFE2_JWT_SIGNING_KEY_SECRET_ARN',
+    'LIFE2_ALLOWED_ACCOUNT_ID',
+    'TODOIST_TENANT_CATALOG_SECRET_ARN'
+  ])('fails when %s is missing', (name) => {
+    expect(() =>
+      AppConfig.fromRestEnvironment({ ...completeEnvironment, [name]: undefined })
+    ).toThrowError(ConfigurationError);
+  });
 });

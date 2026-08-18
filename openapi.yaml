@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
   title: Life2 Lists Service REST API
-  version: 0.4.0
+  version: 0.5.0
   description: |
-    Authenticated REST access to the private Todoist-backed Life2 shopping list.
-    Todoist remains the system of record. Except for `GET /health`, callers must
-    provide either the configured opaque automation bearer token or a verified
-    Life2 JWT for the configured account.
+    Todoist remains the system of record. Legacy Shopping is an explicitly
+    single-owner compatibility surface. Task Lists requires a verified Life2 JWT,
+    derives the tenant from its accountId claim, resolves that tenant's server-side
+    Todoist credential, and exposes the active Todoist projects visible to it.
   license:
     name: GNU General Public License v3.0
     identifier: GPL-3.0-only
@@ -26,7 +26,9 @@ tags:
   - name: Items
     description: Shopping-list query and mutation operations.
   - name: Task Lists
-    description: Named task lists and their ordered tasks.
+    description: Tenant-scoped Todoist projects and their ordered tasks.
+  - name: Todoist Connection
+    description: Credential-free status for the acting Life2 tenant's server-managed connection.
 security:
   - bearerAuth: []
 paths:
@@ -95,6 +97,36 @@ paths:
                   - $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /v1/todoist/connection:
+    get:
+      operationId: getTodoistConnection
+      summary: Read the acting tenant's Todoist connection state
+      tags: [Todoist Connection]
+      responses:
+        '200':
+          description: Credential-free connection state selected exclusively from the verified JWT accountId.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TodoistConnectionResponse' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      operationId: disconnectTodoist
+      summary: Request removal of the Todoist connection
+      description: Server-managed catalogue connections cannot be changed through this API.
+      tags: [Todoist Connection]
+      responses:
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/todoist/connection/authorizations:
+    post:
+      operationId: startTodoistAuthorization
+      summary: Request interactive Todoist authorization
+      description: This release uses separately protected, server-managed tenant credentials and rejects browser provisioning.
+      tags: [Todoist Connection]
+      responses:
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /v1/task-lists:
     get:
       operationId: listTaskLists
@@ -102,7 +134,7 @@ paths:
       tags: [Task Lists]
       responses:
         '200':
-          description: Active task lists backed by sections in the configured Todoist project.
+          description: Every active Todoist project visible through the acting tenant's connected account.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TaskListListResponse' }
@@ -506,6 +538,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: The authenticated credential cannot access this tenant-scoped resource.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     ValidationError:
       description: The request is invalid or destructive confirmation is absent.
       content:
@@ -566,6 +604,19 @@ components:
       properties:
         id: { type: string }
         name: { type: string, minLength: 1, maxLength: 128 }
+    TodoistConnectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [status, canManageConnection]
+          properties:
+            status: { type: string, enum: [connected, not_connected] }
+            canManageConnection: { type: boolean, const: false }
+        meta: { $ref: '#/components/schemas/Meta' }
     TaskListTask:
       type: object
       additionalProperties: false

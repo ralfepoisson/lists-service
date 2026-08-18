@@ -20,21 +20,32 @@ verified on 2026-07-31.
 - `DELETE /v1/items?status=completed` deletes all completed tasks returned
   inside the configured rolling history window and requires
   `X-Confirm-Destructive-Action: true`.
-- `GET|POST /v1/task-lists` lists or creates section-backed named lists.
+- `GET /v1/todoist/connection` returns only `connected|not_connected` and
+  `canManageConnection: false` for the verified JWT `accountId`.
+- `POST /v1/todoist/connection/authorizations` and
+  `DELETE /v1/todoist/connection` return `403`: browser onboarding and
+  disconnection are intentionally unavailable in this release.
+- `GET|POST /v1/task-lists` lists the connected tenant's existing Todoist
+  projects or creates a new Todoist project.
 - `GET|POST /v1/task-lists/{listId}/tasks` lists or creates scoped tasks;
   `PATCH`, `DELETE`, and `/complete` provide edit, removal, and completion.
 - `PUT /v1/task-lists/{listId}/tasks/order` requires an exact active-task ID
   permutation and sends one Todoist `item_reorder` sync command.
 - `DELETE /v1/task-lists/{listId}` requires destructive confirmation, closes
-  every active task, and archives the section only after all closes succeed.
+  every active task, and archives the project only after all closes succeed;
+  Todoist Inbox is rejected because it cannot be archived.
 
-Nested mutations verify section-to-configured-project and task-to-section scope.
-Legacy `/v1/items*` behavior remains unchanged.
+Nested mutations verify task-to-project scope through the Todoist connection
+selected only by the verified Life2 JWT `accountId`. Static automation
+authentication is forbidden for connection and Task Lists routes. Legacy
+`/v1/items*` behavior remains bound to the configured owner/project and accepts
+the static token or that owner's Life2 JWT.
 
-All protected routes require `Authorization: Bearer <token>`. The token may be
-the configured opaque automation credential or a Life2 JWT. JWT verification
+All protected routes require `Authorization: Bearer <token>`. JWT verification
 pins `HS256`, issuer `life2.ralfe.me`, audience `account`, expiry/time claims,
-non-empty `sub` and `email`, and the single configured `accountId`. JSON
+and non-empty `accountId`, `sub`, and `email`. For Task Lists, `accountId`
+selects one catalogue entry containing a token-secret reference; the referenced
+Todoist token is loaded separately and never returned. JSON
 responses use `data`/`meta` or `error`/`meta` envelopes with a correlation
 request ID. The successful PDF route instead returns `application/pdf` with a
 download content disposition; its errors retain the standard JSON envelope.
@@ -47,6 +58,11 @@ The implementation was checked against the
 
 - base URL: `https://api.todoist.com/api/v1`;
 - authentication: `Authorization: Bearer <token>`;
+- task-list discovery: cursor-paginated `GET /projects`; each returned Todoist
+  project is a Life2 `TaskList`, ordered by provider `child_order`;
+- task-list creation: `POST /projects`;
+- task-list archival: `POST /projects/{project_id}/archive` after active tasks
+  close successfully; Inbox archival is refused;
 - active project tasks: `GET /tasks?project_id=...`, cursor-paginated as
   `results` plus `next_cursor`;
 - task creation: `POST /tasks` with `content` and `project_id`;
@@ -87,7 +103,11 @@ an empty-list success for history outside the supported window.
 The implementation can return:
 
 - `AUTHENTICATION_REQUIRED`
+- `AUTHORIZATION_FORBIDDEN`
+- `TODOIST_NOT_CONNECTED`
 - `VALIDATION_ERROR`
+- `TASK_LIST_NOT_FOUND`
+- `TASK_NOT_FOUND`
 - `ITEM_NOT_FOUND`
 - `AMBIGUOUS_ITEM`
 - `DESTRUCTIVE_ACTION_NOT_CONFIRMED`

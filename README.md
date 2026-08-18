@@ -4,10 +4,12 @@ Public `GET /version` publishes schema version `1`, the SemVer from
 `package.json`, and the immutable Lambda/container release revision without
 requiring Todoist access or authentication.
 
-`lists-service` is a private, single-household shopping-list and named task-list
-service. Todoist is the sole system of record. The configured project remains
-the service container: legacy shopping items are root tasks, while named task
-lists are Todoist sections. The same object-oriented application layer powers:
+`lists-service` is a private shopping-list and tenant-scoped task-list service.
+Todoist is the sole system of record for list and task content. For Task Lists,
+each Todoist project visible through a tenant's server-managed connection is a
+named list. The legacy Shopping/Alexa surface remains deliberately separate and
+uses its original owner token and configured project. The same object-oriented
+application layer powers:
 
 - an authenticated REST API for the Life2 webapp and personal automations; and
 - an `en-GB` Alexa custom skill for adding, reading, removing, completing, and
@@ -37,8 +39,8 @@ for the `active` alias. The raw API Gateway endpoint is disabled.
 The service repository includes authenticated transient PDF rendering but
 deliberately excludes an owned web/mobile UI. The separate Life2 webapp consumes
 its REST and PDF contracts. Version 1 still excludes Alexa's built-in
-shopping list, deprecated Alexa List Management APIs, account linking,
-multi-household tenancy, LLM matching, product lookup, purchasing, scanning,
+shopping list, deprecated Alexa List Management APIs, browser-managed Todoist
+onboarding or disconnection, LLM matching, product lookup, purchasing, scanning,
 meal planning, and inventory management.
 
 Todoist completed-item operations cover the configured rolling history window,
@@ -56,15 +58,16 @@ API Gateway HTTP API -> REST Lambda adapter ----/           |
                                                ShoppingListRepository
                                                              |
                                                              v
-                                          Todoist API v1 + one project
+                          tenant catalogue -> protected token -> Todoist API v1
 ```
 
 The domain and application layers know nothing about Alexa, API Gateway,
 Lambda, Secrets Manager, or Todoist transport. Separate REST and Alexa Lambda
-entry points share the same domain, use cases, repository port, and Todoist
-adapter. The two functions receive different IAM secret permissions: Alexa
-reads only the Todoist token, while REST also reads its static bearer token and
-the Life2 JWT verification secret.
+entry points share domain and transport primitives while retaining distinct
+identity boundaries. REST derives Task Lists tenancy only from a verified Life2
+JWT `accountId`, resolves that account in a protected server-side catalogue,
+then loads the separately protected Todoist token named by the catalogue entry.
+Alexa and legacy Shopping continue to use the configured owner token/project.
 
 See the [architecture guide](docs/architecture.md), authoritative
 [package diagram](docs/architecture/solution-architecture.puml),
@@ -88,6 +91,8 @@ npm ci
 ```
 
 ## Todoist setup
+
+### Legacy Shopping and Alexa
 
 1. Choose a dedicated Todoist project name, for example `Household Shopping`.
 2. Open Todoist **Settings → Integrations → Developer** and copy the personal
@@ -118,17 +123,31 @@ The implementation uses the current unified Todoist API v1 at
 `POST /tasks/{id}/close`, `POST /tasks/{id}/reopen`, and bounded completed
 history. See [Todoist contract notes](docs/api.md#todoist-provider-contract).
 
-Authenticated `/v1/task-lists` operations create named lists and let callers
-list, add, edit, remove, complete, and reorder their tasks. Deleting a list
-requires explicit destructive confirmation, completes all remaining active
-tasks, and archives the section only after every completion succeeds. It does
-not invoke Todoist's destructive section-delete operation.
+### Tenant Task Lists catalogue
+
+Task Lists does not reuse the static automation identity or accept a provider
+token from the browser. Provision a protected JSON catalogue whose only field
+is `connections`; every entry must contain exactly one unique `accountId` and
+one `tokenSecretRef`. Store each referenced token in its own protected secret
+and grant the REST runtime access only to the catalogue and explicitly listed
+tenant token secrets. A missing account entry is `not_connected`; it never
+falls back to the legacy token.
+
+Authenticated `/v1/task-lists` operations enumerate the connected tenant's
+existing Todoist projects, create projects, and let callers list, add, edit,
+remove, complete, and reorder their tasks. Deleting a list requires explicit
+destructive confirmation, completes all remaining active tasks, and archives
+the project only after every completion succeeds. Todoist Inbox cannot be
+archived.
 
 ## AWS secrets
 
-Create three secrets:
+Create the legacy runtime secrets plus the tenant catalogue:
 
-- Todoist token: readable by both functions.
+- Legacy Todoist token: retained for Shopping and Alexa only.
+- Tenant connection catalogue: JSON containing only unique `accountId` and
+  `tokenSecretRef` pairs; it contains no Todoist token values.
+- One separately protected Todoist token secret for every catalogue entry.
 - Strong REST bearer token: readable only by the REST function.
 - Base64-encoded Life2 HS256 signing key: readable only by the REST function.
 
@@ -164,7 +183,9 @@ the optional Lists API automatically when both ignored files exist:
 - `.life2-local/config/lists-allowed-account-id`.
 
 The launcher mounts secrets read-only, derives the JWT verification-key file
-from the same local Auth signing key, and routes `/api/lists/` through Nginx.
+from the same local Auth signing key, generates a one-account local catalogue
+whose token reference points at the existing mounted token, and routes
+`/api/lists/` through Nginx.
 
 Engineering work must follow the
 [implementation guidelines](docs/implementation/implementation_guidelines.md)
@@ -294,8 +315,10 @@ Alexa, ask Household List to clear completed items
 
 ## REST API
 
-`GET /health` is public. Every other route accepts either a strong static token
-for personal automations or a verified Life2 JWT for the one configured account:
+`GET /health` is public. Protected legacy Shopping routes accept the strong
+static automation token or the configured owner's verified Life2 JWT. Task
+Lists and Todoist connection routes require a verified Life2 JWT; the static
+automation token receives `403` and can never select a tenant connection.
 
 ```text
 Authorization: Bearer <REST_API_TOKEN>
@@ -309,6 +332,11 @@ curl "$LISTS_URL/health"
 
 curl "$LISTS_URL/health/ready" \
   -H "Authorization: Bearer $LISTS_TOKEN"
+
+# The following connection response requires a Life2 JWT, not LISTS_TOKEN:
+# {"status":"connected|not_connected","canManageConnection":false}
+curl "$LISTS_URL/v1/todoist/connection" \
+  -H "Authorization: Bearer $LIFE2_TOKEN"
 
 curl "$LISTS_URL/v1/items" \
   -H "Authorization: Bearer $LISTS_TOKEN"
@@ -347,10 +375,16 @@ status codes are in [the API guide](docs/api.md).
 - Todoist and REST tokens are loaded through the configured secret-provider
   adapter—AWS Secrets Manager in Lambda or read-only files in local Compose—and
   cached only inside the warm process.
+- The tenant catalogue contains token references, never token values. It rejects
+  malformed entries and duplicate `accountId` values before any tenant request.
 - REST token comparison uses equal-length constant-time comparison.
 - Life2 JWT verification pins HS256, issuer `life2.ralfe.me`, audience
-  `account`, time claims, non-empty subject/email claims, and the configured
-  `accountId`. The signing key is backend-only and decoded from base64.
+  `account`, time claims, and non-empty `accountId`, subject, and email claims.
+  The verified `accountId` exclusively selects the tenant catalogue entry; no
+  request field can override it. The signing key is backend-only.
+- `GET /v1/todoist/connection` reveals only `connected` or `not_connected` and
+  `canManageConnection: false`. Authorization-start and disconnect requests are
+  intentionally rejected because this release has no browser credential flow.
 - `/health` reveals only process liveness; readiness is authenticated.
 - Alexa skill ID is restricted in Lambda IAM permission and checked by ASK SDK.
 - Inputs and provider responses are validated; raw upstream errors and stack
@@ -363,12 +397,15 @@ status codes are in [the API guide](docs/api.md).
 ## Troubleshooting
 
 - **Cold-start configuration error:** check all required environment variables
-  and ensure exactly one usable project ID/name is configured.
+  and ensure the legacy project plus tenant catalogue/token references are valid.
 - **Named project is absent:** initialization creates it once. If multiple exact
   name matches exist, remove the ambiguity or configure a stable project ID.
-- **401 from this API:** verify the `Bearer` scheme and either the REST token or
-  Life2 token claims/signature. The
+- **401 from this API:** verify the `Bearer` scheme and Life2 token claims/signature.
+  A static automation token is intentionally `403` on Task Lists. The
   response intentionally gives no credential detail.
+- **Todoist not connected:** the verified JWT `accountId` has no catalogue entry.
+  Browser onboarding is unavailable; an operator must provision the catalogue
+  and separate token secret through the protected deployment process.
 - **Todoist authentication failure:** rotate/check the Todoist secret and IAM
   access; credentials are never printed.
 - **Completed items absent:** confirm the completion occurred inside
@@ -394,9 +431,11 @@ status codes are in [the API guide](docs/api.md).
 - Exact duplicate detection is a read-before-create policy and cannot eliminate
   every race between concurrent requests.
 - Mutation retries are conservative to avoid duplicate/destructive ambiguity.
-- One configured Life2 account/household and Todoist project are supported;
-  Alexa account linking and multi-household routing are extension points, not
-  implemented behavior.
+- Task Lists supports multiple Life2 accounts through the server-side catalogue,
+  with one Todoist connection per `accountId`. It does not provide browser
+  onboarding, disconnect, token refresh, or per-user (`sub`) connections.
+- Static automation and Alexa remain bound to the legacy owner/project and are
+  not multitenant Task Lists identities.
 - `GET /v1/items.pdf` renders the current active Todoist items as a transient
   A4 PDF download. The service stores no generated file and the webapp exposes
   it through the Shopping page's **Print** button.

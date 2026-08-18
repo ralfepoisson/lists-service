@@ -32,6 +32,23 @@ variable "todoist_token_secret_arn" {
   sensitive   = true
 }
 
+variable "todoist_tenant_catalog_secret_arn" {
+  description = "ARN of the server-side accountId to Todoist token-secret reference catalogue."
+  type        = string
+  sensitive   = true
+}
+
+variable "todoist_tenant_token_secret_arns" {
+  description = "Exact Todoist token secret ARNs referenced by the tenant catalogue."
+  type        = list(string)
+  sensitive   = true
+
+  validation {
+    condition     = length(var.todoist_tenant_token_secret_arns) > 0 && alltrue([for arn in var.todoist_tenant_token_secret_arns : trimspace(arn) != ""])
+    error_message = "todoist_tenant_token_secret_arns must contain at least one non-empty secret ARN."
+  }
+}
+
 variable "rest_api_token_secret_arn" {
   description = "ARN of an existing Secrets Manager secret containing only the REST bearer token."
   type        = string

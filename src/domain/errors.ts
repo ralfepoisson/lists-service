@@ -6,6 +6,8 @@ export type ApplicationErrorCode =
   | 'ITEM_NOT_FOUND'
   | 'TASK_LIST_NOT_FOUND'
   | 'TASK_NOT_FOUND'
+  | 'TODOIST_NOT_CONNECTED'
+  | 'AUTHORIZATION_FORBIDDEN'
   | 'ROUTE_NOT_FOUND'
   | 'UPSTREAM_AUTHENTICATION_FAILED'
   | 'UPSTREAM_RATE_LIMITED'
@@ -44,6 +46,18 @@ export class TaskListNotFoundError extends ApplicationError {
 export class TaskNotFoundError extends ApplicationError {
   constructor() {
     super('TASK_NOT_FOUND', 'The requested task was not found in that task list.', 404);
+  }
+}
+
+export class TodoistNotConnectedError extends ApplicationError {
+  constructor() {
+    super('TODOIST_NOT_CONNECTED', 'Connect a Todoist account before using Task Lists.', 409);
+  }
+}
+
+export class AuthorizationForbiddenError extends ApplicationError {
+  constructor(message = 'This credential cannot access the requested tenant resource.') {
+    super('AUTHORIZATION_FORBIDDEN', message, 403);
   }
 }
 

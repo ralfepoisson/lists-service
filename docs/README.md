@@ -20,8 +20,9 @@ unverified real boundaries until separately exercised.
    verification status.
 4. [Solution architecture diagram](architecture/solution-architecture.puml) —
    proposed package and dependency structure.
-5. [Logical data model](architecture/erd.puml) — Todoist-backed logical entities;
-   no application database is proposed.
+5. [Logical data model](architecture/erd.puml) — Todoist-backed logical entities
+   plus the protected server-side tenant connection catalogue; no application
+   database is introduced.
 6. [Implementation log](implementation/implementation_log.md) — newest-first
    record of changes, decisions, commands, and evidence.
 7. [REST and Todoist API guide](api.md) — channel contract and dated provider
@@ -33,6 +34,9 @@ unverified real boundaries until separately exercised.
 - [ADR 0001: Separate Lambda entry points](decisions/0001-separate-lambda-entry-points.md)
 - [ADR 0002: Todoist as the system of record](decisions/0002-todoist-system-of-record.md)
 - [ADR 0003: Versioned production release](decisions/0003-versioned-production-release.md)
+- [ADR 0004: Named task lists as sections](decisions/0004-named-task-lists-as-sections.md)
+  — superseded.
+- [ADR 0005: Tenant Todoist projects as task lists](decisions/0005-tenant-todoist-projects-as-task-lists.md)
 
 ## Source specification
 

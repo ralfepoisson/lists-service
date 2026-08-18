@@ -17,16 +17,17 @@ import type { Clock } from './TodoistShoppingListRepository.js';
 import { SystemClock } from './TodoistShoppingListRepository.js';
 import type { TodoistClient } from './TodoistClient.js';
 
-interface TodoistSection {
+interface TodoistProject {
   readonly id: string;
-  readonly project_id: string;
   readonly name: string;
+  readonly child_order: number;
+  readonly inbox_project: boolean;
 }
 
 interface TodoistTask {
   readonly id: string;
   readonly project_id: string;
-  readonly section_id: string;
+  readonly section_id: string | null;
   readonly content: string;
   readonly child_order: number;
 }
@@ -34,31 +35,33 @@ interface TodoistTask {
 export class TodoistTaskListRepository implements TaskListRepository {
   constructor(
     private readonly client: TodoistClient,
-    private readonly projectId: string,
     private readonly completedLookbackDays: number,
     private readonly clock: Clock = new SystemClock(),
     private readonly uuidFactory: () => string = randomUUID
   ) {}
 
   async listTaskLists(): Promise<TaskList[]> {
-    const sections = await this.collectPages<TodoistSection>(
-      '/sections',
-      { project_id: this.projectId, limit: '200' },
-      (value) => this.parseSection(value)
+    const projects = await this.collectPages<TodoistProject>(
+      '/projects',
+      { limit: '200' },
+      (value) => this.parseProject(value)
     );
-    return sections.map((section) => new TaskList(section.id, section.name));
+    return projects
+      .sort((left, right) => left.child_order - right.child_order)
+      .map((project) => new TaskList(project.id, project.name));
   }
 
   async createTaskList(name: string): Promise<TaskList> {
-    const payload = await this.client.post('/sections', { name, project_id: this.projectId });
-    const section = this.parseSection(payload);
-    if (section.project_id !== this.projectId) throw this.malformedResponse();
-    return new TaskList(section.id, section.name);
+    const project = this.parseProject(await this.client.post('/projects', { name }));
+    return new TaskList(project.id, project.name);
   }
 
   async archiveTaskList(listId: string): Promise<void> {
-    await this.requireList(listId);
-    await this.client.post(`/sections/${encodeURIComponent(listId)}/archive`);
+    const project = await this.requireList(listId);
+    if (project.inbox_project) {
+      throw new ValidationError('The Todoist Inbox cannot be archived.');
+    }
+    await this.client.post(`/projects/${encodeURIComponent(listId)}/archive`);
   }
 
   async listTasks(listId: string, status: TaskStatus): Promise<TaskListTask[]> {
@@ -76,8 +79,7 @@ export class TodoistTaskListRepository implements TaskListRepository {
     await this.requireList(listId);
     const payload = await this.client.post('/tasks', {
       content,
-      project_id: this.projectId,
-      section_id: listId
+      project_id: listId
     });
     return this.mapTask(this.parseTask(payload), false, listId);
   }
@@ -131,19 +133,18 @@ export class TodoistTaskListRepository implements TaskListRepository {
     }
   }
 
-  private async requireList(listId: string): Promise<TodoistSection> {
-    let section: TodoistSection;
+  private async requireList(listId: string): Promise<TodoistProject> {
+    let project: TodoistProject;
     try {
-      section = this.parseSection(
-        await this.client.get(`/sections/${encodeURIComponent(listId)}`, {})
+      project = this.parseProject(
+        await this.client.get(`/projects/${encodeURIComponent(listId)}`, {})
       );
     } catch (error: unknown) {
       if (error instanceof TaskListNotFoundError) throw error;
       if (this.isNotFound(error)) throw new TaskListNotFoundError();
       throw error;
     }
-    if (section.project_id !== this.projectId) throw new TaskListNotFoundError();
-    return section;
+    return project;
   }
 
   private async requireTask(listId: string, taskId: string): Promise<TodoistTask> {
@@ -155,7 +156,7 @@ export class TodoistTaskListRepository implements TaskListRepository {
       if (this.isNotFound(error)) throw new TaskNotFoundError();
       throw error;
     }
-    if (task.project_id !== this.projectId || task.section_id !== listId) {
+    if (task.project_id !== listId) {
       throw new TaskNotFoundError();
     }
     return task;
@@ -164,7 +165,7 @@ export class TodoistTaskListRepository implements TaskListRepository {
   private async listActiveTasks(listId: string): Promise<TaskListTask[]> {
     const tasks = await this.collectPages<TodoistTask>(
       '/tasks',
-      { project_id: this.projectId, section_id: listId, limit: '200' },
+      { project_id: listId, limit: '200' },
       (value) => this.parseTask(value)
     );
     return tasks
@@ -179,8 +180,7 @@ export class TodoistTaskListRepository implements TaskListRepository {
     const tasks = await this.collectPages<TodoistTask>(
       '/tasks/completed/by_completion_date',
       {
-        project_id: this.projectId,
-        section_id: listId,
+        project_id: listId,
         since: since.toISOString(),
         until: until.toISOString(),
         limit: '200'
@@ -219,16 +219,23 @@ export class TodoistTaskListRepository implements TaskListRepository {
     return collected;
   }
 
-  private parseSection(value: unknown): TodoistSection {
+  private parseProject(value: unknown): TodoistProject {
     if (
       !this.isRecord(value) ||
       typeof value['id'] !== 'string' ||
-      typeof value['project_id'] !== 'string' ||
-      typeof value['name'] !== 'string'
+      typeof value['name'] !== 'string' ||
+      typeof value['child_order'] !== 'number' ||
+      !Number.isInteger(value['child_order']) ||
+      typeof value['inbox_project'] !== 'boolean'
     ) {
       throw this.malformedResponse();
     }
-    return { id: value['id'], project_id: value['project_id'], name: value['name'] };
+    return {
+      id: value['id'],
+      name: value['name'],
+      child_order: value['child_order'],
+      inbox_project: value['inbox_project']
+    };
   }
 
   private parseTask(value: unknown): TodoistTask {
@@ -236,7 +243,7 @@ export class TodoistTaskListRepository implements TaskListRepository {
       !this.isRecord(value) ||
       typeof value['id'] !== 'string' ||
       typeof value['project_id'] !== 'string' ||
-      typeof value['section_id'] !== 'string' ||
+      (value['section_id'] !== null && typeof value['section_id'] !== 'string') ||
       typeof value['content'] !== 'string' ||
       typeof value['child_order'] !== 'number' ||
       !Number.isInteger(value['child_order'])
@@ -253,7 +260,7 @@ export class TodoistTaskListRepository implements TaskListRepository {
   }
 
   private mapTask(task: TodoistTask, isCompleted: boolean, listId: string): TaskListTask {
-    if (task.project_id !== this.projectId || task.section_id !== listId) {
+    if (task.project_id !== listId) {
       throw new TaskNotFoundError();
     }
     return new TaskListTask(task.id, listId, task.content, isCompleted, task.child_order);

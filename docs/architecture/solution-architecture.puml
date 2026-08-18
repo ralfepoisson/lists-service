@@ -10,13 +10,15 @@ note as StatusNote
   IMPLEMENTED CHECKOUT - REST PRODUCTION READ BOUNDARY VERIFIED
   Nine real Todoist mutations and a confirming read succeeded locally.
   REST Lambda v2, canonical TLS/auth, and Todoist reads verified 2026-08-08.
+  Tenant catalogue/project Task Lists has local automated evidence only.
+  Multitenant provider acceptance and deployment remain pending.
   Alexa and CI remain unverified.
 end note
 
 actor "Household member" as Household
 component "Alexa custom skill\n(en-GB)" as Alexa
 component "Personal REST client" as RestClient
-component "Life2 Webapp\nShopping page" as Webapp
+component "Life2 Webapp\nShopping + Task Lists" as Webapp
 component "Local Nginx\n/api/lists proxy" as LocalProxy
 component "Local lists-api\nNode container" as LocalApi
 
@@ -30,7 +32,8 @@ cloud "AWS" {
     component "REST request adapter" as RestAdapter
     component "Composite authentication strategy" as AuthAdapter
     component "Constant-time static token" as StaticAuth
-    component "Life2 JWT verifier\nHS256 + account allow-list" as JwtAuth
+    component "Life2 JWT verifier\nHS256 + principal claims" as JwtAuth
+    component "Task Lists authorization\nLife2 principal only" as TaskListAuth
     file "Packaged PDFKit data\nstandard fonts + colour profile" as PdfAssets
   }
 
@@ -55,7 +58,9 @@ cloud "AWS" {
   }
 
   package "Shared infrastructure adapters" as Infrastructure {
-    component "Todoist shopping + named-list\nrepository adapters" as TodoistRepository
+    component "Legacy Shopping repository\nconfigured owner project" as ShoppingRepository
+    component "Tenant Task Lists repository\nTodoist projects + tasks" as TaskListRepository
+    component "Tenant connection catalogue\naccountId -> token secret ref" as TenantCatalog
     component "TodoistProjectResolver\nresolve or create once" as ProjectResolver
     component "Typed Todoist client\n(timeout, pagination, retry)" as TodoistClient
     component "Secret provider strategy\nAWS or read-only file" as SecretProvider
@@ -72,7 +77,8 @@ component "Local REST composition\nfile secrets only" as LocalComposition
 
 cloud "Todoist" {
   component "Official Todoist REST API" as TodoistApi
-  database "Configured Lists project\nroot shopping tasks + named-list sections" as TodoistProject
+  database "Legacy owner Shopping project" as TodoistProject
+  database "Tenant-visible projects\nTask Lists" as TenantProjects
 }
 
 Household --> Alexa
@@ -91,6 +97,7 @@ AlexaAlias --> AlexaAdapter
 RestAdapter --> AuthAdapter
 AuthAdapter --> StaticAuth
 AuthAdapter --> JwtAuth
+JwtAuth --> TaskListAuth : verified accountId
 RestAdapter --> UseCases
 RestAdapter --> PrintUseCase : GET /v1/items.pdf
 AlexaAdapter --> SkillValidator
@@ -106,12 +113,18 @@ PrintUseCase --> UseCases : list active items
 PrintUseCase --> PdfPort
 PdfRenderer ..|> PdfPort
 PdfRenderer --> PdfAssets : reads at render time
-TodoistRepository ..|> RepositoryPort
-TodoistRepository --> TodoistClient
+ShoppingRepository ..|> RepositoryPort
+TaskListRepository ..|> RepositoryPort
+ShoppingRepository --> TodoistClient
+TaskListRepository --> TodoistClient
 ProjectResolver --> TodoistClient
-ProjectResolver --> TodoistRepository : injects stable project ID
+ProjectResolver --> ShoppingRepository : injects legacy project ID
 TodoistClient --> TodoistApi : HTTPS
 TodoistApi --> TodoistProject
+TodoistApi --> TenantProjects
+TaskListAuth --> TenantCatalog
+TenantCatalog --> SecretProvider : tokenSecretRef
+TenantCatalog --> TaskListRepository : request-scoped token
 
 AuthAdapter --> SecretProvider
 TodoistClient --> SecretProvider

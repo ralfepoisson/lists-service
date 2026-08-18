@@ -2,8 +2,10 @@
 
 ## Status
 
-Accepted for the implemented REST slice on 18 August 2026. Real-provider and
-production verification remain pending.
+Superseded on 18 August 2026 by
+[ADR 0005](0005-tenant-todoist-projects-as-task-lists.md). This file remains the
+historical record of the earlier implemented section-based slice; it is not the
+current Task Lists runtime model.
 
 ## Decision
 

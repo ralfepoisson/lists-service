@@ -23,6 +23,13 @@ describe('LocalRestApplicationComposition', () => {
       'jwt-key',
       Buffer.from('local-signing-key-with-at-least-32-bytes').toString('base64')
     );
+    const tenantCatalog = await secretFile(
+      directory,
+      'tenant-catalog',
+      JSON.stringify({
+        connections: [{ accountId: 'account-123', tokenSecretRef: todoistToken }]
+      })
+    );
 
     const application = await LocalRestApplicationComposition.create({
       SECRET_PROVIDER: 'file',
@@ -31,6 +38,7 @@ describe('LocalRestApplicationComposition', () => {
       REST_API_TOKEN_SECRET_ARN: restToken,
       LIFE2_JWT_SIGNING_KEY_SECRET_ARN: signingKey,
       LIFE2_ALLOWED_ACCOUNT_ID: 'account-123',
+      TODOIST_TENANT_CATALOG_SECRET_ARN: tenantCatalog,
       ALEXA_SKILL_ID: 'local-rest-only'
     });
 

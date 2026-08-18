@@ -1,4 +1,4 @@
-import type { RestAuthenticator } from './RestBearerAuthenticator.js';
+import type { RestAuthenticator, RestPrincipal } from './RestBearerAuthenticator.js';
 
 export class CompositeRestAuthenticator implements RestAuthenticator {
   constructor(private readonly strategies: readonly RestAuthenticator[]) {
@@ -7,7 +7,11 @@ export class CompositeRestAuthenticator implements RestAuthenticator {
     }
   }
 
-  isAuthenticated(authorizationHeader: string | undefined): boolean {
-    return this.strategies.some((strategy) => strategy.isAuthenticated(authorizationHeader));
+  authenticate(authorizationHeader: string | undefined): RestPrincipal | undefined {
+    for (const strategy of this.strategies) {
+      const principal = strategy.authenticate(authorizationHeader);
+      if (principal !== undefined) return principal;
+    }
+    return undefined;
   }
 }

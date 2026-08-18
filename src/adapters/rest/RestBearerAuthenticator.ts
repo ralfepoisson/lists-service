@@ -1,7 +1,16 @@
 import { timingSafeEqual } from 'node:crypto';
 
+export type RestPrincipal =
+  | { readonly authMethod: 'automation' }
+  | {
+      readonly authMethod: 'life2';
+      readonly accountId: string;
+      readonly sub: string;
+      readonly email: string;
+    };
+
 export interface RestAuthenticator {
-  isAuthenticated(authorizationHeader: string | undefined): boolean;
+  authenticate(authorizationHeader: string | undefined): RestPrincipal | undefined;
 }
 
 export class RestBearerAuthenticator implements RestAuthenticator {
@@ -11,14 +20,14 @@ export class RestBearerAuthenticator implements RestAuthenticator {
     this.expectedToken = Buffer.from(token, 'utf8');
   }
 
-  isAuthenticated(authorizationHeader: string | undefined): boolean {
+  authenticate(authorizationHeader: string | undefined): RestPrincipal | undefined {
     if (authorizationHeader === undefined || !authorizationHeader.startsWith('Bearer ')) {
-      return false;
+      return undefined;
     }
     const providedToken = Buffer.from(authorizationHeader.slice('Bearer '.length), 'utf8');
-    return (
-      providedToken.length === this.expectedToken.length &&
+    return providedToken.length === this.expectedToken.length &&
       timingSafeEqual(providedToken, this.expectedToken)
-    );
+      ? { authMethod: 'automation' }
+      : undefined;
   }
 }

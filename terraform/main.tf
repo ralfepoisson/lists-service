@@ -14,10 +14,11 @@ locals {
     TODOIST_TOKEN_SECRET_ARN = var.todoist_token_secret_arn
   }
   rest_environment = merge(local.todoist_environment, {
-    REST_API_TOKEN_SECRET_ARN        = var.rest_api_token_secret_arn
-    LIFE2_JWT_SIGNING_KEY_SECRET_ARN = var.life2_jwt_signing_key_secret_arn
-    LIFE2_ALLOWED_ACCOUNT_ID         = var.life2_allowed_account_id
-    RELEASE_GIT_COMMIT               = var.release_git_commit
+    REST_API_TOKEN_SECRET_ARN         = var.rest_api_token_secret_arn
+    LIFE2_JWT_SIGNING_KEY_SECRET_ARN  = var.life2_jwt_signing_key_secret_arn
+    LIFE2_ALLOWED_ACCOUNT_ID          = var.life2_allowed_account_id
+    TODOIST_TENANT_CATALOG_SECRET_ARN = var.todoist_tenant_catalog_secret_arn
+    RELEASE_GIT_COMMIT                = var.release_git_commit
   })
   alexa_environment = merge(local.todoist_environment, {
     ALEXA_SKILL_ID     = var.alexa_skill_id
@@ -84,11 +85,15 @@ data "aws_iam_policy_document" "rest_runtime" {
     sid     = "ReadRestRuntimeSecrets"
     effect  = "Allow"
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      var.todoist_token_secret_arn,
-      var.rest_api_token_secret_arn,
-      var.life2_jwt_signing_key_secret_arn
-    ]
+    resources = concat(
+      [
+        var.todoist_token_secret_arn,
+        var.todoist_tenant_catalog_secret_arn,
+        var.rest_api_token_secret_arn,
+        var.life2_jwt_signing_key_secret_arn
+      ],
+      var.todoist_tenant_token_secret_arns
+    )
   }
 }
 
@@ -225,7 +230,19 @@ locals {
     "DELETE /v1/items",
     "DELETE /v1/items/{itemId}",
     "POST /v1/items/{itemId}/complete",
-    "POST /v1/items/{itemId}/reopen"
+    "POST /v1/items/{itemId}/reopen",
+    "GET /v1/todoist/connection",
+    "POST /v1/todoist/connection/authorizations",
+    "DELETE /v1/todoist/connection",
+    "GET /v1/task-lists",
+    "POST /v1/task-lists",
+    "DELETE /v1/task-lists/{listId}",
+    "GET /v1/task-lists/{listId}/tasks",
+    "POST /v1/task-lists/{listId}/tasks",
+    "PUT /v1/task-lists/{listId}/tasks/order",
+    "PATCH /v1/task-lists/{listId}/tasks/{taskId}",
+    "DELETE /v1/task-lists/{listId}/tasks/{taskId}",
+    "POST /v1/task-lists/{listId}/tasks/{taskId}/complete"
   ])
 }
 

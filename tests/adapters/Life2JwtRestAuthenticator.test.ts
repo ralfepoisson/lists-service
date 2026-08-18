@@ -6,7 +6,7 @@ import { Life2JwtRestAuthenticator } from '../../src/adapters/rest/Life2JwtRestA
 describe('Life2JwtRestAuthenticator', () => {
   const signingKey = 'a-test-only-life2-signing-key-with-enough-entropy';
   const encodedSigningKey = Buffer.from(signingKey, 'utf8').toString('base64');
-  const authenticator = new Life2JwtRestAuthenticator(encodedSigningKey, 'account-123');
+  const authenticator = new Life2JwtRestAuthenticator(encodedSigningKey);
 
   function token(
     claims: Readonly<Record<string, unknown>> = {},
@@ -30,13 +30,21 @@ describe('Life2JwtRestAuthenticator', () => {
     );
   }
 
-  it('accepts a valid Life2 bearer token for the configured account', () => {
-    expect(authenticator.isAuthenticated(`Bearer ${token()}`)).toBe(true);
+  it('returns the verified tenant and actor for any valid Life2 account token', () => {
+    expect(authenticator.authenticate(`Bearer ${token()}`)).toEqual({
+      authMethod: 'life2',
+      accountId: 'account-123',
+      sub: 'user-123',
+      email: 'user@example.com'
+    });
+    expect(authenticator.authenticate(`Bearer ${token({ accountId: 'account-456' })}`)).toEqual(
+      expect.objectContaining({ accountId: 'account-456' })
+    );
   });
 
   it.each([
     ['missing bearer', undefined],
-    ['wrong account', `Bearer ${token({ accountId: 'account-456' })}`],
+    ['missing account', `Bearer ${token({ accountId: undefined })}`],
     ['missing subject', `Bearer ${token({ sub: undefined })}`],
     ['missing email', `Bearer ${token({ email: undefined })}`],
     [
@@ -59,6 +67,6 @@ describe('Life2JwtRestAuthenticator', () => {
       )}`
     ]
   ])('rejects a token with %s', (_reason, authorization) => {
-    expect(authenticator.isAuthenticated(authorization)).toBe(false);
+    expect(authenticator.authenticate(authorization)).toBeUndefined();
   });
 });

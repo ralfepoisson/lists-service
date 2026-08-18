@@ -1,14 +1,41 @@
 import { describe, expect, it } from 'vitest';
 
 import { RestApiController, type RestRequest } from '../../src/adapters/rest/RestApiController.js';
-import { RestBearerAuthenticator } from '../../src/adapters/rest/RestBearerAuthenticator.js';
+import type {
+  RestAuthenticator,
+  RestPrincipal
+} from '../../src/adapters/rest/RestBearerAuthenticator.js';
 import { ShoppingListService } from '../../src/application/ShoppingListService.js';
 import { TaskListService } from '../../src/application/TaskListService.js';
+import type { TodoistConnectionStatus } from '../../src/application/ports/TenantTaskListServiceProvider.js';
 import { ShoppingListPrintService } from '../../src/application/ShoppingListPrintService.js';
 import { PdfKitShoppingListRenderer } from '../../src/adapters/pdf/PdfKitShoppingListRenderer.js';
 import { ShoppingListItem } from '../../src/domain/ShoppingListItem.js';
 import { InMemoryShoppingListRepository } from '../support/InMemoryShoppingListRepository.js';
 import { InMemoryTaskListRepository } from '../support/InMemoryTaskListRepository.js';
+
+class FixtureAuthenticator implements RestAuthenticator {
+  authenticate(header: string | undefined): RestPrincipal | undefined {
+    if (header === 'Bearer rest-secret') return { authMethod: 'automation' };
+    if (header === 'Bearer life2-tenant') {
+      return {
+        authMethod: 'life2',
+        accountId: 'account-123',
+        sub: 'user-123',
+        email: 'user@example.com'
+      };
+    }
+    if (header === 'Bearer life2-other') {
+      return {
+        authMethod: 'life2',
+        accountId: 'account-456',
+        sub: 'user-456',
+        email: 'other@example.com'
+      };
+    }
+    return undefined;
+  }
+}
 
 class RestControllerFixture {
   readonly repository = new InMemoryShoppingListRepository([
@@ -16,15 +43,27 @@ class RestControllerFixture {
     new ShoppingListItem('2', 'bread', true)
   ]);
   readonly taskListRepository = new InMemoryTaskListRepository();
+  readonly taskListService = new TaskListService(this.taskListRepository);
+  readonly requestedTenantIds: string[] = [];
   readonly controller = new RestApiController(
     new ShoppingListService(this.repository),
-    new RestBearerAuthenticator('rest-secret'),
+    new FixtureAuthenticator(),
     new ShoppingListPrintService(
       new ShoppingListService(this.repository),
       new PdfKitShoppingListRenderer(),
       () => new Date('2026-08-17T08:30:00.000Z')
     ),
-    new TaskListService(this.taskListRepository)
+    {
+      connectionStatus: async (accountId): Promise<TodoistConnectionStatus> => ({
+        status: accountId === 'account-123' ? 'connected' : 'not_connected',
+        canManageConnection: false
+      }),
+      forTenant: async (accountId): Promise<TaskListService> => {
+        this.requestedTenantIds.push(accountId);
+        return this.taskListService;
+      }
+    },
+    'account-123'
   );
 
   request(overrides: Partial<RestRequest>): RestRequest {
@@ -58,7 +97,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body).data).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.4.0',
+        version: '0.5.0',
         revision: 'lists-test-revision'
       });
     } finally {
@@ -196,7 +235,7 @@ describe('RestApiController', () => {
 
   it('creates and lists named task lists', async () => {
     const fixture = new RestControllerFixture();
-    const headers = { authorization: 'Bearer rest-secret' };
+    const headers = { authorization: 'Bearer life2-tenant' };
 
     const created = await fixture.controller.handle(
       fixture.request({
@@ -213,11 +252,57 @@ describe('RestApiController', () => {
     expect(created.statusCode).toBe(201);
     expect(JSON.parse(created.body).data).toMatchObject({ name: 'Errands' });
     expect(JSON.parse(listed.body).meta.count).toBe(2);
+    expect(fixture.requestedTenantIds).toEqual(['account-123', 'account-123']);
+  });
+
+  it('requires a tenant-identifying Life2 JWT for Task Lists and exposes tenant connection state', async () => {
+    const fixture = new RestControllerFixture();
+
+    const automation = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/task-lists',
+        headers: { authorization: 'Bearer rest-secret' }
+      })
+    );
+    const connected = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/todoist/connection',
+        headers: { authorization: 'Bearer life2-tenant' }
+      })
+    );
+    const otherTenant = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/todoist/connection',
+        headers: { authorization: 'Bearer life2-other' }
+      })
+    );
+
+    expect(automation.statusCode).toBe(403);
+    expect(JSON.parse(connected.body).data).toEqual({
+      status: 'connected',
+      canManageConnection: false
+    });
+    expect(JSON.parse(otherTenant.body).data).toEqual({
+      status: 'not_connected',
+      canManageConnection: false
+    });
+  });
+
+  it('does not expose the legacy Shopping projection to another Life2 tenant', async () => {
+    const fixture = new RestControllerFixture();
+    const response = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/items',
+        headers: { authorization: 'Bearer life2-other' }
+      })
+    );
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain('milk');
   });
 
   it('supports nested task create, edit, complete, delete, and list routes', async () => {
     const fixture = new RestControllerFixture();
-    const headers = { authorization: 'Bearer rest-secret' };
+    const headers = { authorization: 'Bearer life2-tenant' };
 
     const created = await fixture.controller.handle(
       fixture.request({
@@ -266,7 +351,7 @@ describe('RestApiController', () => {
       fixture.request({
         path: '/v1/task-lists/list-1/tasks/order',
         method: 'PUT',
-        headers: { authorization: 'Bearer rest-secret' },
+        headers: { authorization: 'Bearer life2-tenant' },
         body: JSON.stringify({ taskIds: ['task-2', 'task-1'] })
       })
     );
@@ -280,7 +365,7 @@ describe('RestApiController', () => {
 
   it('completes active tasks and archives a list only with destructive confirmation', async () => {
     const fixture = new RestControllerFixture();
-    const headers = { authorization: 'Bearer rest-secret' };
+    const headers = { authorization: 'Bearer life2-tenant' };
 
     const rejected = await fixture.controller.handle(
       fixture.request({ path: '/v1/task-lists/list-1', method: 'DELETE', headers })

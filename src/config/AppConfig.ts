@@ -10,6 +10,7 @@ export class AppConfig {
     readonly restApiTokenSecretArn: string | undefined,
     readonly life2JwtSigningKeySecretArn: string | undefined,
     readonly life2AllowedAccountId: string | undefined,
+    readonly todoistTenantCatalogSecretArn: string | undefined,
     readonly alexaSkillId: string | undefined,
     readonly logLevel: 'debug' | 'info' | 'warn' | 'error',
     readonly todoistApiBaseUrl: string,
@@ -29,6 +30,7 @@ export class AppConfig {
     restApiTokenSecretArn: string;
     life2JwtSigningKeySecretArn: string;
     life2AllowedAccountId: string;
+    todoistTenantCatalogSecretArn: string;
   } {
     return {
       restApiTokenSecretArn: AppConfig.requireConfigured(
@@ -42,6 +44,10 @@ export class AppConfig {
       life2AllowedAccountId: AppConfig.requireConfigured(
         this.life2AllowedAccountId,
         'LIFE2_ALLOWED_ACCOUNT_ID'
+      ),
+      todoistTenantCatalogSecretArn: AppConfig.requireConfigured(
+        this.todoistTenantCatalogSecretArn,
+        'TODOIST_TENANT_CATALOG_SECRET_ARN'
       )
     };
   }
@@ -60,6 +66,10 @@ export class AppConfig {
         : undefined;
     const life2AllowedAccountId =
       channel === 'rest' ? this.requireValue(environment, 'LIFE2_ALLOWED_ACCOUNT_ID') : undefined;
+    const todoistTenantCatalogSecretArn =
+      channel === 'rest'
+        ? this.requireValue(environment, 'TODOIST_TENANT_CATALOG_SECRET_ARN')
+        : undefined;
     const alexaSkillId =
       channel === 'alexa' ? this.requireValue(environment, 'ALEXA_SKILL_ID') : undefined;
     const todoistProjectId = this.optionalValue(environment, 'TODOIST_PROJECT_ID');
@@ -82,6 +92,7 @@ export class AppConfig {
       restApiTokenSecretArn,
       life2JwtSigningKeySecretArn,
       life2AllowedAccountId,
+      todoistTenantCatalogSecretArn,
       alexaSkillId,
       logLevel,
       todoistApiBaseUrl,

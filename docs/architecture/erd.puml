@@ -6,30 +6,25 @@ hide stereotypes
 skinparam shadowing false
 
 note as StatusNote
-  VERIFIED API CONTRACT MODEL - NOT A LOCAL DATABASE
+  IMPLEMENTED LOGICAL MODEL - NOT A LOCAL DATABASE
   Todoist remains the system of record.
-  Provider fields checked against Todoist API v1 on 2026-07-31.
+  Legacy provider fields were checked against Todoist API v1.
+  Tenant catalogue/project mapping has local automated evidence;
+  multitenant live-provider and deployment evidence remain pending.
 end note
 
-entity "Todoist Project" as Project {
+entity "Todoist Project / TaskList" as Project {
   * id : string <<provider identity>>
   --
   name : string
-}
-
-entity "Todoist Section / TaskList" as TaskList {
-  * id : string <<provider identity>>
-  --
-  * projectId : string <<provider reference>>
-  * name : string
-  isArchived : boolean
+  childOrder : integer
+  inboxProject : boolean
 }
 
 entity "Todoist Task / ShoppingListItem" as Item {
   * id : string <<provider identity>>
   --
   * projectId : string <<provider reference>>
-  sectionId : string [0..1] <<provider reference>>
   * content : string
   description : string [0..1]
   * isCompleted : boolean
@@ -39,13 +34,14 @@ entity "Todoist Task / ShoppingListItem" as Item {
 }
 
 entity "Runtime Configuration" as Configuration {
-  * todoistTokenSecretReference : secret reference
+  * legacyTodoistTokenSecretReference : secret reference
   --
-  todoistProjectId : string [preferred]
-  todoistProjectName : string [fallback]
+  legacyTodoistProjectId : string [preferred]
+  legacyTodoistProjectName : string [fallback]
   * restApiTokenSecretReference : secret reference
   * life2JwtSigningKeySecretReference : secret reference
-  * life2AllowedAccountId : identifier
+  * legacyOwnerAccountId : identifier
+  * tenantCatalogSecretReference : secret reference
   alexaSkillId : string [only after real skill creation]
   * releaseGitCommit : sha1
   restActiveVersion : positive integer [0..1]
@@ -54,26 +50,46 @@ entity "Runtime Configuration" as Configuration {
   * completedLookbackDays : integer (1..90)
 }
 
+entity "Tenant Todoist connection catalogue entry" as Connection {
+  * accountId : Life2 tenant identifier
+  --
+  * tokenSecretRef : secret reference
+}
+
+entity "Protected tenant Todoist token" as TenantToken {
+  * secretReference : identifier
+  --
+  tokenValue : secret <<never in catalogue>>
+}
+
 Project ||--o{ Item : contains
-Project ||--o{ TaskList : contains named lists
-TaskList ||--o{ Item : scopes named-list tasks
-Configuration ..> Project : selects exactly one
+Connection ..> Project : token exposes existing lists
+Connection ||--|| TenantToken : references
+Configuration ..> Connection : loads catalogue
+Configuration ..> Project : selects legacy Shopping project
 
 note right of Configuration
   Stores references and identifiers only.
   Secret values are retrieved at runtime from
   AWS Secrets Manager or local read-only files.
-  A name-only project is created when absent;
-  its resolved ID scopes repository operations.
+  The legacy name-only project is created when absent.
+  Task Lists enumerates projects through the token selected
+  exclusively by the verified JWT accountId.
   This is configuration, not persisted
   application-domain data.
   Published Lambda versions and aliases provide
   release rollback; Todoist data is not copied.
 end note
 
+note bottom of Connection
+  The catalogue contains no token values and rejects duplicate
+  accountId entries. A missing entry reports not_connected.
+  Browser onboarding and disconnect are unavailable.
+end note
+
 note bottom of Item
   GET /v1/items.pdf reads active tasks and renders a transient
-  printable snapshot. No PDF or duplicate list entity is persisted.
+  legacy Shopping snapshot. No PDF or list entity is persisted.
 end note
 
 StatusNote .. Item

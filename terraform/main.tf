@@ -27,7 +27,7 @@ locals {
 
 data "archive_file" "rest" {
   type        = "zip"
-  source_file = "${path.module}/../dist/rest-lambda.mjs"
+  source_dir  = "${path.module}/../dist/rest-package"
   output_path = "${path.module}/rest-lambda.zip"
 }
 
@@ -220,6 +220,7 @@ locals {
     "GET /health/ready",
     "GET /version",
     "GET /v1/items",
+    "GET /v1/items.pdf",
     "POST /v1/items",
     "DELETE /v1/items",
     "DELETE /v1/items/{itemId}",

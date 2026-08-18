@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Life2 Lists Service REST API
-  version: 0.3.0
+  version: 0.3.1
   description: |
     Authenticated REST access to the private Todoist-backed Life2 shopping list.
     Todoist remains the system of record. Except for `GET /health`, callers must

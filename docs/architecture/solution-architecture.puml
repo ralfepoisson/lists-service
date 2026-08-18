@@ -31,6 +31,7 @@ cloud "AWS" {
     component "Composite authentication strategy" as AuthAdapter
     component "Constant-time static token" as StaticAuth
     component "Life2 JWT verifier\nHS256 + account allow-list" as JwtAuth
+    file "Packaged PDFKit data\nstandard fonts + colour profile" as PdfAssets
   }
 
   package "Alexa Lambda entry point" as AlexaLambda {
@@ -104,6 +105,7 @@ UseCases --> RepositoryPort
 PrintUseCase --> UseCases : list active items
 PrintUseCase --> PdfPort
 PdfRenderer ..|> PdfPort
+PdfRenderer --> PdfAssets : reads at render time
 TodoistRepository ..|> RepositoryPort
 TodoistRepository --> TodoistClient
 ProjectResolver --> TodoistClient

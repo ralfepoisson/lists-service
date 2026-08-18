@@ -179,9 +179,12 @@ terraform -chdir=terraform validate
 plantuml -checkonly docs/architecture/solution-architecture.puml docs/architecture/erd.puml
 ```
 
-`npm run build` creates `dist/rest-lambda.mjs` and
-`dist/alexa-lambda.mjs`. Terraform packages that directory for both functions
-and selects the applicable handler.
+`npm run build` creates the local REST bundle, the Alexa Lambda bundle, and a
+`dist/rest-package/` directory containing the REST Lambda plus PDFKit's
+standard-font and colour-profile data. The local image copies the same data
+beside `local-rest.cjs`; Terraform archives `rest-package/` so PDF generation
+does not depend on build-time `node_modules`. `npm run verify:build` fails if a
+required runtime asset is missing.
 
 An opt-in live Todoist acceptance command requires an explicit flag and a
 dedicated test project. It creates a uniquely named task, retrieves and

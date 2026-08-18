@@ -1,4 +1,4 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { copyFile, cp, mkdir, rm } from 'node:fs/promises';
 
 import { build } from 'esbuild';
 
@@ -16,7 +16,7 @@ class LambdaBundleBuilder {
       platform: 'node',
       target: 'node24',
       banner: {
-        js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
+        js: "import { createRequire } from 'node:module'; import { dirname } from 'node:path'; import { fileURLToPath } from 'node:url'; const require = createRequire(import.meta.url); const __filename = fileURLToPath(import.meta.url); const __dirname = dirname(__filename);"
       },
       outdir: 'dist',
       outExtension: { '.js': '.mjs' },
@@ -36,6 +36,10 @@ class LambdaBundleBuilder {
       sourcemap: true,
       minify: false
     });
+    await cp('node_modules/pdfkit/js/data', 'dist/data', { recursive: true });
+    await mkdir('dist/rest-package', { recursive: true });
+    await copyFile('dist/rest-lambda.mjs', 'dist/rest-package/rest-lambda.mjs');
+    await cp('dist/data', 'dist/rest-package/data', { recursive: true });
   }
 }
 

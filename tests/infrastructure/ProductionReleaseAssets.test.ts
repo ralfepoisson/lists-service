@@ -25,6 +25,23 @@ describe('production release assets', () => {
     expect(build).toContain('banner:');
   });
 
+  it('packages PDFKit runtime data with local and REST Lambda bundles', () => {
+    const build = read('scripts/build.mjs');
+    const dockerfile = read('Dockerfile');
+    const deploy = read('scripts/deploy-production.sh');
+    const main = read('terraform/main.tf');
+    const packageJson = read('package.json');
+
+    expect(build).toContain('node_modules/pdfkit/js/data');
+    expect(build).toContain('fileURLToPath(import.meta.url)');
+    expect(build).toContain('dist/data');
+    expect(build).toContain('dist/rest-package');
+    expect(dockerfile).toContain('/app/dist/data ./data');
+    expect(deploy).toContain('/app/dist/rest-package');
+    expect(main).toMatch(/source_dir\s*=\s*"\$\{path\.module\}\/\.\.\/dist\/rest-package"/);
+    expect(packageJson).toContain('npm run build && npm run verify:build');
+  });
+
   it('activates the canonical HTTPS origin only through the REST alias', () => {
     const main = read('terraform/main.tf');
 
@@ -34,6 +51,7 @@ describe('production release assets', () => {
     expect(main).toContain('resource "aws_route53_record" "rest_ipv6"');
     expect(main).toContain('aws_lambda_alias.rest_active');
     expect(main).toContain('var.rest_domain_name');
+    expect(main).toContain('"GET /v1/items.pdf"');
   });
 
   it('keeps Alexa absent until a real skill id exists and supports versioned activation', () => {

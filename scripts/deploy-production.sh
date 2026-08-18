@@ -73,7 +73,8 @@ docker create \
 git archive HEAD | docker cp - "$build_container:/app"
 docker start --attach "$build_container"
 mkdir -p "$repository_root/dist"
-docker cp "$build_container:/app/dist/rest-lambda.mjs" "$repository_root/dist/rest-lambda.mjs"
+rm -rf "$repository_root/dist/rest-package"
+docker cp "$build_container:/app/dist/rest-package" "$repository_root/dist/rest-package"
 docker cp "$build_container:/app/dist/alexa-lambda.mjs" "$repository_root/dist/alexa-lambda.mjs"
 terraform -chdir=terraform init -reconfigure \
   -backend-config="bucket=$TF_STATE_BUCKET" \

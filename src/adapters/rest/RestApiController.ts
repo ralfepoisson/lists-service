@@ -43,19 +43,15 @@ export class RestApiController {
         return this.success(200, { status: 'ok' }, request.requestId);
       }
       if (request.method === 'GET' && request.path === '/version') {
-        return this.success(
-          200,
-          {
-            schemaVersion: 1,
-            component: 'lists-service',
-            version: packageJson.version,
-            revision:
-              process.env['LIFE2_RELEASE_REVISION'] ??
-              process.env['RELEASE_GIT_COMMIT'] ??
-              'development'
-          },
-          request.requestId
-        );
+        return this.response(200, {
+          schemaVersion: 1,
+          component: 'lists-service',
+          version: packageJson.version,
+          revision:
+            process.env['LIFE2_RELEASE_REVISION'] ??
+            process.env['RELEASE_GIT_COMMIT'] ??
+            'development'
+        });
       }
       const principal = this.authenticator.authenticate(request.headers['authorization']);
       if (principal === undefined) {

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Life2 Lists Service REST API
-  version: 0.5.0
+  version: 0.5.1
   description: |
     Todoist remains the system of record. Legacy Shopping is an explicitly
     single-owner compatibility surface. Task Lists requires a verified Life2 JWT,
@@ -45,17 +45,12 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [data, meta]
+                required: [schemaVersion, component, version, revision]
                 properties:
-                  data:
-                    type: object
-                    required: [schemaVersion, component, version, revision]
-                    properties:
-                      schemaVersion: { type: integer, enum: [1] }
-                      component: { type: string, enum: [lists-service] }
-                      version: { type: string }
-                      revision: { type: string }
-                  meta: { type: object }
+                  schemaVersion: { type: integer, enum: [1] }
+                  component: { type: string, enum: [lists-service] }
+                  version: { type: string }
+                  revision: { type: string }
   /health:
     get:
       operationId: getHealth

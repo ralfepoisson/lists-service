@@ -94,10 +94,10 @@ describe('RestApiController', () => {
     try {
       const fixture = new RestControllerFixture();
       const response = await fixture.controller.handle(fixture.request({ path: '/version' }));
-      expect(JSON.parse(response.body).data).toEqual({
+      expect(JSON.parse(response.body)).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.5.0',
+        version: '0.5.1',
         revision: 'lists-test-revision'
       });
     } finally {

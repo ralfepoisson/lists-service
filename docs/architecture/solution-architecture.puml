@@ -44,7 +44,7 @@ cloud "AWS" {
   }
 
   package "Shared application package" as Application {
-    component "Shopping-list + task-list\nuse-case objects" as UseCases
+    component "Shopping-list + task-list\nuse-case objects\n+ bounded workspace search" as UseCases
     component "ShoppingListPrintService\ntransient active-list snapshot" as PrintUseCase
     interface "ShoppingListRepository +\nTaskListRepository" as RepositoryPort
     interface "ShoppingListPdfRenderer" as PdfPort
@@ -99,6 +99,7 @@ AuthAdapter --> StaticAuth
 AuthAdapter --> JwtAuth
 JwtAuth --> TaskListAuth : verified accountId
 RestAdapter --> UseCases
+RestAdapter --> UseCases : POST /api/v1/search\nLife2 principal only
 RestAdapter --> PrintUseCase : GET /v1/items.pdf
 AlexaAdapter --> SkillValidator
 AlexaAdapter --> IdentityResolver
@@ -143,6 +144,12 @@ note top of RestAlias
   https://lists.life-sqrd.com
   Published candidate -> acceptance -> active alias.
   Rollback selects a retained accepted version.
+end note
+
+note right of UseCases
+  Search enumerates only the acting tenant's visible projects
+  and active tasks. It is a transient projection and emits
+  allowlisted route names rather than arbitrary URLs.
 end note
 
 @enduml

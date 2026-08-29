@@ -26,6 +26,34 @@ credentials, full Alexa payloads, or sensitive shopping-item content.
 
 ---
 
+### 2026-08-29 20:09 CEST — Tenant workspace-search provider
+
+- **Status:** implemented, independent validation pending
+- **Scope:** Added bounded read-only search across the acting tenant's visible
+  Todoist project names and active task content for the Life2 workspace BFF.
+- **Requirements:** `LST-SCP-007`, `LST-API-002`, `LST-SEC-007`
+- **Design/decisions:** Reused the tenant-scoped `TaskListService` and repository
+  boundary, loaded active tasks concurrently, and returned normalized
+  `task-lists` targets rather than URLs. No search database or index was added.
+- **Files:** `src/application/TaskListService.ts`, REST controller/tests,
+  `openapi.yaml`, README, requirements/API/architecture docs, and PlantUML.
+- **TDD evidence:**
+  - Red: focused REST tests returned two expected 404 failures before the route existed.
+  - Green: `npx vitest run tests/adapters/RestApiController.test.ts -t 'workspace search'`
+    returned 2 passed and 19 skipped.
+  - Refactor/regression: `npm run validate` returned 21 test files and 126 tests
+    passed after format, lint, strict type-check, build, and build-artifact checks.
+- **Other validation:** `plantuml -checkonly docs/architecture/solution-architecture.puml docs/architecture/erd.puml && git diff --check` passed.
+- **Real-boundary evidence:** Pending; no Todoist mutation, deployment, or
+  production claim was made. Existing provider connectivity is not proof of
+  the new endpoint.
+- **Documentation:** README, API guide, traceable requirements, OpenAPI,
+  architecture narrative, package diagram, and logical ERD updated.
+- **Deviations/risks:** The search provider reads current Todoist data and must
+  complete within the BFF timeout; per-list active-task reads are concurrent.
+- **Next actions:** Independent agent reruns the evidence command; deployed
+  multitenant acceptance remains separately authorized work.
+
 ## 2026-08-08 20:08 CEST — Production REST activation and acceptance
 
 - **Status:** verified for REST/AWS/Todoist production reads; Alexa blocked

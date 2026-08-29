@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Life2 Lists Service REST API
-  version: 0.5.1
+  version: 0.6.0
   description: |
     Todoist remains the system of record. Legacy Shopping is an explicitly
     single-owner compatibility surface. Task Lists requires a verified Life2 JWT,
@@ -27,11 +27,38 @@ tags:
     description: Shopping-list query and mutation operations.
   - name: Task Lists
     description: Tenant-scoped Todoist projects and their ordered tasks.
+  - name: Workspace Search
+    description: Internal normalized search provider for the Life2 workspace BFF.
   - name: Todoist Connection
     description: Credential-free status for the acting Life2 tenant's server-managed connection.
 security:
   - bearerAuth: []
 paths:
+  /api/v1/search:
+    post:
+      operationId: searchWorkspace
+      summary: Search the acting tenant's task lists and active tasks
+      tags: [Workspace Search]
+      description: Tenant identity is derived only from the verified Life2 JWT; any accountId in the body is ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceSearchRequest' }
+      responses:
+        '200':
+          description: Bounded normalized results. The response is private and must not be stored.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkspaceSearchResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
   /version:
     get:
       operationId: getComponentVersion
@@ -564,6 +591,43 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    WorkspaceSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, minLength: 2, maxLength: 120 }
+        limit: { type: integer, minimum: 1, maximum: 30, default: 5 }
+        accountId:
+          type: string
+          description: Ignored; tenant authority comes only from the verified JWT.
+    WorkspaceSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 30
+          items: { $ref: '#/components/schemas/WorkspaceSearchHit' }
+    WorkspaceSearchHit:
+      type: object
+      additionalProperties: false
+      required: [kind, resourceId, title, score, target]
+      properties:
+        kind: { type: string, enum: [task-list, task-list-task] }
+        resourceId: { type: string }
+        title: { type: string }
+        subtitle: { type: string }
+        score: { type: number, minimum: 0, maximum: 1 }
+        target:
+          type: object
+          additionalProperties: false
+          required: [routeName, params]
+          properties:
+            routeName: { type: string, const: task-lists }
+            params:
+              type: object
+              additionalProperties: { type: string }
     Meta:
       type: object
       additionalProperties: false

@@ -15,6 +15,11 @@ application layer powers:
 - an `en-GB` Alexa custom skill for adding, reading, removing, completing, and
   clearing shopping-list items.
 
+`POST /api/v1/search` supplies bounded workspace-search results over the acting
+tenant's visible list names and active task content. It requires a verified
+Life2 JWT, ignores caller-supplied tenant identifiers, and returns allowlisted
+route targets rather than arbitrary URLs.
+
 This project is not created by, affiliated with, or supported by Doist.
 
 The implementation is complete for local/static verification. On 31 July 2026,
@@ -386,6 +391,8 @@ status codes are in [the API guide](docs/api.md).
   `canManageConnection: false`. Authorization-start and disconnect requests are
   intentionally rejected because this release has no browser credential flow.
 - `/health` reveals only process liveness; readiness is authenticated.
+- Workspace search is read-only, capped at 30 hits, and sends
+  `Cache-Control: private, no-store` because task text can be sensitive.
 - Alexa skill ID is restricted in Lambda IAM permission and checked by ASK SDK.
 - Inputs and provider responses are validated; raw upstream errors and stack
   traces are never returned.

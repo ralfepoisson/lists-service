@@ -156,6 +156,16 @@ read-only; source files remain ignored and never enter images or logs.
    list. Deletion completes active tasks before project archival and refuses
    Inbox archival.
 
+### Search tenant Task Lists
+
+1. The REST adapter admits only a verified Life2 principal and derives the
+   tenant from its signed `accountId` claim.
+2. The request-scoped service enumerates that tenant's visible Todoist projects
+   and active tasks through the existing repository port.
+3. It ranks bounded case-insensitive list/task matches and returns only
+   normalized `task-lists` route targets with resource identifiers.
+4. Results are transient, never persisted, and are marked private/no-store.
+
 ### Remove or complete by Alexa text
 
 1. The adapter obtains the item phrase, eliciting it when absent.

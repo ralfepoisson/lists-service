@@ -62,11 +62,21 @@ entity "Protected tenant Todoist token" as TenantToken {
   tokenValue : secret <<never in catalogue>>
 }
 
+entity "Workspace search hit" as SearchHit {
+  * transient resource identity
+  --
+  type, title, subtitle
+  score
+  allowlisted route target
+}
+
 Project ||--o{ Item : contains
 Connection ..> Project : token exposes existing lists
 Connection ||--|| TenantToken : references
 Configuration ..> Connection : loads catalogue
 Configuration ..> Project : selects legacy Shopping project
+Project ||..o{ SearchHit : projected on demand
+Item ||..o{ SearchHit : active tasks projected on demand
 
 note right of Configuration
   Stores references and identifiers only.
@@ -90,6 +100,11 @@ end note
 note bottom of Item
   GET /v1/items.pdf reads active tasks and renders a transient
   legacy Shopping snapshot. No PDF or list entity is persisted.
+end note
+
+note bottom of SearchHit
+  Search hits are transient and tenant-scoped.
+  No additional database or search index is introduced.
 end note
 
 StatusNote .. Item

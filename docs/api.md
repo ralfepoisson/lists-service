@@ -34,6 +34,11 @@ verified on 2026-07-31.
 - `DELETE /v1/task-lists/{listId}` requires destructive confirmation, closes
   every active task, and archives the project only after all closes succeed;
   Todoist Inbox is rejected because it cannot be archived.
+- `POST /api/v1/search` accepts a 2-120 character `query` and `limit` from
+  1-30, searches visible list names and active task content, and returns the
+  normalized provider contract `{items}` for the workspace-search BFF. This
+  read-only route requires a Life2 JWT and is deliberately outside the legacy
+  success envelope so all search providers share one fan-out contract.
 
 Nested mutations verify task-to-project scope through the Todoist connection
 selected only by the verified Life2 JWT `accountId`. Static automation
@@ -49,6 +54,9 @@ Todoist token is loaded separately and never returned. JSON
 responses use `data`/`meta` or `error`/`meta` envelopes with a correlation
 request ID. The successful PDF route instead returns `application/pdf` with a
 download content disposition; its errors retain the standard JSON envelope.
+Workspace search is the documented exception: successful responses use the
+cross-service `{items}` provider contract and include `Cache-Control: private,
+no-store`.
 
 ## Todoist provider contract
 

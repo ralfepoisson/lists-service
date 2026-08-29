@@ -108,6 +108,18 @@ export class RestApiController {
         'Todoist connections are managed through the server-side tenant connection catalogue.'
       );
     }
+    if (request.path === '/api/v1/search' && request.method === 'POST') {
+      const life2Principal = this.requireLife2Principal(principal);
+      const search = this.parseSearchBody(request.body);
+      const taskListService = await this.taskListServices.forTenant(life2Principal.accountId);
+      return this.response(
+        200,
+        { items: await taskListService.search(search.query, search.limit) },
+        {
+          'cache-control': 'private, no-store'
+        }
+      );
+    }
     if (request.path === '/v1/items.pdf' && request.method === 'GET') {
       this.requireLegacyAccess(principal);
       const document = await this.printService.generate();
@@ -324,6 +336,27 @@ export class RestApiController {
     return payload.taskIds;
   }
 
+  private parseSearchBody(body: string | undefined): { query: string; limit: number } {
+    if (body === undefined) throw new ValidationError('A JSON request body is required.');
+    let payload: unknown;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      throw new ValidationError('The request body must be valid JSON.');
+    }
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+      throw new ValidationError('The request body must be a JSON object.');
+    }
+    const values = payload as Record<string, unknown>;
+    if (
+      typeof values['query'] !== 'string' ||
+      (values['limit'] !== undefined && typeof values['limit'] !== 'number')
+    ) {
+      throw new ValidationError('Search query must be a string and limit must be a number.');
+    }
+    return { query: values['query'], limit: values['limit'] === undefined ? 5 : values['limit'] };
+  }
+
   private success(
     statusCode: number,
     data: unknown,
@@ -348,12 +381,17 @@ export class RestApiController {
     });
   }
 
-  private response(statusCode: number, payload: unknown): RestResponse {
+  private response(
+    statusCode: number,
+    payload: unknown,
+    additionalHeaders: Readonly<Record<string, string>> = {}
+  ): RestResponse {
     return {
       statusCode,
       headers: {
         'content-type': 'application/json; charset=utf-8',
-        'cache-control': 'no-store'
+        'cache-control': 'no-store',
+        ...additionalHeaders
       },
       body: JSON.stringify(payload)
     };

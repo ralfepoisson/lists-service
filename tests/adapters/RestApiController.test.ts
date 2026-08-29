@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { RestApiController, type RestRequest } from '../../src/adapters/rest/RestApiController.js';
+import {
+  RestApiController,
+  type RestRequest,
+  type RestResponse
+} from '../../src/adapters/rest/RestApiController.js';
 import type {
   RestAuthenticator,
   RestPrincipal
@@ -97,7 +101,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body)).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.5.1',
+        version: '0.6.0',
         revision: 'lists-test-revision'
       });
     } finally {
@@ -253,6 +257,54 @@ describe('RestApiController', () => {
     expect(JSON.parse(created.body).data).toMatchObject({ name: 'Errands' });
     expect(JSON.parse(listed.body).meta.count).toBe(2);
     expect(fixture.requestedTenantIds).toEqual(['account-123', 'account-123']);
+  });
+
+  it('searches only the Life2 tenant task-list service with a bounded body', async () => {
+    const fixture = new RestControllerFixture();
+    const response = await fixture.controller.handle(
+      fixture.request({
+        path: '/api/v1/search',
+        method: 'POST',
+        headers: { authorization: 'Bearer life2-tenant' },
+        body: JSON.stringify({ query: 'milk', limit: 5, accountId: 'account-456' })
+      })
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(JSON.parse(response.body)).toEqual({
+      items: [
+        {
+          kind: 'task-list-task',
+          resourceId: 'task-1',
+          title: 'Milk',
+          summary: 'Home',
+          matchedField: 'content',
+          score: 1,
+          target: { routeName: 'task-lists', params: { listId: 'list-1', taskId: 'task-1' } }
+        }
+      ]
+    });
+    expect(fixture.requestedTenantIds).toEqual(['account-123']);
+  });
+
+  it('rejects automation credentials and unbounded workspace search input', async () => {
+    const fixture = new RestControllerFixture();
+    const request = (authorization: string, body: object): Promise<RestResponse> =>
+      fixture.controller.handle(
+        fixture.request({
+          path: '/api/v1/search',
+          method: 'POST',
+          headers: { authorization },
+          body: JSON.stringify(body)
+        })
+      );
+
+    expect((await request('Bearer rest-secret', { query: 'milk', limit: 5 })).statusCode).toBe(403);
+    expect((await request('Bearer life2-tenant', { query: 'x', limit: 5 })).statusCode).toBe(400);
+    expect((await request('Bearer life2-tenant', { query: 'milk', limit: 31 })).statusCode).toBe(
+      400
+    );
   });
 
   it('requires a tenant-identifying Life2 JWT for Task Lists and exposes tenant connection state', async () => {

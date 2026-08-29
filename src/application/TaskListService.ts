@@ -5,6 +5,19 @@ import { TaskListNamePolicy } from '../domain/TaskListNamePolicy.js';
 import type { TaskListTask } from '../domain/TaskListTask.js';
 import type { TaskListRepository, TaskStatus } from './ports/TaskListRepository.js';
 
+export interface TaskListSearchHit {
+  readonly kind: 'task-list' | 'task-list-task';
+  readonly resourceId: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly matchedField: 'name' | 'content';
+  readonly score: number;
+  readonly target: {
+    readonly routeName: 'task-lists';
+    readonly params: Readonly<Record<string, string>>;
+  };
+}
+
 export class TaskListService {
   constructor(
     private readonly repository: TaskListRepository,
@@ -18,6 +31,60 @@ export class TaskListService {
 
   async createTaskList(rawName: string): Promise<TaskList> {
     return this.repository.createTaskList(this.namePolicy.validate(rawName));
+  }
+
+  async search(rawQuery: string, limit: number): Promise<TaskListSearchHit[]> {
+    const query = rawQuery.trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-GB');
+    if (
+      query.length < 2 ||
+      query.length > 120 ||
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > 30
+    ) {
+      throw new ValidationError('Search query must be 2 to 120 characters and limit 1 to 30.');
+    }
+    const results: TaskListSearchHit[] = [];
+    const lists = await this.repository.listTaskLists();
+    const listsWithTasks = await Promise.all(
+      lists.map(async (list) => ({
+        list,
+        tasks: await this.repository.listTasks(list.id, 'active')
+      }))
+    );
+    for (const { list, tasks } of listsWithTasks) {
+      const listScore = this.matchScore(query, list.name);
+      if (listScore > 0) {
+        results.push({
+          kind: 'task-list',
+          resourceId: list.id,
+          title: list.name,
+          summary: 'Task list',
+          matchedField: 'name',
+          score: listScore,
+          target: { routeName: 'task-lists', params: { listId: list.id } }
+        });
+      }
+      for (const task of tasks) {
+        const taskScore = this.matchScore(query, task.content);
+        if (taskScore > 0) {
+          results.push({
+            kind: 'task-list-task',
+            resourceId: task.id,
+            title: task.content,
+            summary: list.name,
+            matchedField: 'content',
+            score: taskScore,
+            target: { routeName: 'task-lists', params: { listId: list.id, taskId: task.id } }
+          });
+        }
+      }
+    }
+    return results
+      .sort(
+        (left, right) => right.score - left.score || left.title.localeCompare(right.title, 'en-GB')
+      )
+      .slice(0, limit);
   }
 
   async deleteTaskList(
@@ -93,5 +160,12 @@ export class TaskListService {
       throw new ValidationError(`A valid ${resource} ID is required.`);
     }
     return trimmed;
+  }
+
+  private matchScore(query: string, value: string): number {
+    const candidate = value.trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-GB');
+    if (candidate === query) return 1;
+    if (candidate.startsWith(query)) return 0.9;
+    return candidate.includes(query) ? 0.8 : 0;
   }
 }

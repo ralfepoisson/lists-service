@@ -8,7 +8,8 @@ verified on 2026-07-31.
 
 - `GET /health` proves only Lambda/process liveness and is public.
 - `GET /health/ready` calls Todoist for the configured project and requires the
-  REST bearer token.
+  REST bearer token or a verified Life2 JWT and resolves Shopping for that
+  principal's account.
 - `GET /v1/items?status=active|completed|all` defaults to `active`.
 - `GET /v1/items.pdf` reads the current active items and returns a transient A4
   PDF attachment named `shopping-list.pdf`; the generated document is not stored.
@@ -37,14 +38,15 @@ verified on 2026-07-31.
 - `POST /api/v1/search` accepts a 2-120 character `query` and `limit` from
   1-30, searches visible list names and active task content, and returns the
   normalized provider contract `{items}` for the workspace-search BFF. This
-  read-only route requires a Life2 JWT and is deliberately outside the legacy
+  read-only route requires a Life2 JWT and is deliberately outside the standard
   success envelope so all search providers share one fan-out contract.
 
 Nested mutations verify task-to-project scope through the Todoist connection
-selected only by the verified Life2 JWT `accountId`. Static automation
-authentication is forbidden for connection and Task Lists routes. Legacy
-`/v1/items*` behavior remains bound to the configured owner/project and accepts
-the static token or that owner's Life2 JWT.
+selected only by the verified Life2 JWT `accountId`. Automation authentication
+is forbidden for connection and Task Lists routes. `/v1/items*` resolves
+Shopping through either the verified JWT account or the automation token's
+deployment-bound account; neither request surface accepts a caller-selected
+tenant identifier.
 
 All protected routes require `Authorization: Bearer <token>`. JWT verification
 pins `HS256`, issuer `life2.ralfe.me`, audience `account`, expiry/time claims,

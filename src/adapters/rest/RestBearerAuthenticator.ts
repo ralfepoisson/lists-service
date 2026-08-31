@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 
 export type RestPrincipal =
-  | { readonly authMethod: 'automation' }
+  | { readonly authMethod: 'automation'; readonly accountId: string }
   | {
       readonly authMethod: 'life2';
       readonly accountId: string;
@@ -16,7 +16,10 @@ export interface RestAuthenticator {
 export class RestBearerAuthenticator implements RestAuthenticator {
   private readonly expectedToken: Buffer;
 
-  constructor(token: string) {
+  constructor(
+    token: string,
+    private readonly accountId: string
+  ) {
     this.expectedToken = Buffer.from(token, 'utf8');
   }
 
@@ -27,7 +30,7 @@ export class RestBearerAuthenticator implements RestAuthenticator {
     const providedToken = Buffer.from(authorizationHeader.slice('Bearer '.length), 'utf8');
     return providedToken.length === this.expectedToken.length &&
       timingSafeEqual(providedToken, this.expectedToken)
-      ? { authMethod: 'automation' }
+      ? { authMethod: 'automation', accountId: this.accountId }
       : undefined;
   }
 }

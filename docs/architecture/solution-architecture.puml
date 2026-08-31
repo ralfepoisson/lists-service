@@ -31,7 +31,7 @@ cloud "AWS" {
   package "REST Lambda entry point" as RestLambda {
     component "REST request adapter" as RestAdapter
     component "Composite authentication strategy" as AuthAdapter
-    component "Constant-time static token" as StaticAuth
+    component "Constant-time automation token\n+deployment-bound accountId" as StaticAuth
     component "Life2 JWT verifier\nHS256 + principal claims" as JwtAuth
     component "Task Lists authorization\nLife2 principal only" as TaskListAuth
     file "Packaged PDFKit data\nstandard fonts + colour profile" as PdfAssets
@@ -58,7 +58,7 @@ cloud "AWS" {
   }
 
   package "Shared infrastructure adapters" as Infrastructure {
-    component "Legacy Shopping repository\nconfigured owner project" as ShoppingRepository
+    component "Tenant Shopping repository\nconfigured project" as ShoppingRepository
     component "Tenant Task Lists repository\nTodoist projects + tasks" as TaskListRepository
     component "Tenant connection catalogue\naccountId -> token secret ref" as TenantCatalog
     component "TodoistProjectResolver\nresolve or create once" as ProjectResolver
@@ -77,7 +77,7 @@ component "Local REST composition\nfile secrets only" as LocalComposition
 
 cloud "Todoist" {
   component "Official Todoist REST API" as TodoistApi
-  database "Legacy owner Shopping project" as TodoistProject
+  database "Tenant Shopping project" as TodoistProject
   database "Tenant-visible projects\nTask Lists" as TenantProjects
 }
 
@@ -98,11 +98,13 @@ RestAdapter --> AuthAdapter
 AuthAdapter --> StaticAuth
 AuthAdapter --> JwtAuth
 JwtAuth --> TaskListAuth : verified accountId
+StaticAuth --> TenantCatalog : configured accountId
 RestAdapter --> UseCases
 RestAdapter --> UseCases : POST /api/v1/search\nLife2 principal only
 RestAdapter --> PrintUseCase : GET /v1/items.pdf
 AlexaAdapter --> SkillValidator
 AlexaAdapter --> IdentityResolver
+IdentityResolver --> TenantCatalog : configured accountId
 AlexaAdapter --> UseCases
 
 UseCases --> Item
@@ -119,13 +121,14 @@ TaskListRepository ..|> RepositoryPort
 ShoppingRepository --> TodoistClient
 TaskListRepository --> TodoistClient
 ProjectResolver --> TodoistClient
-ProjectResolver --> ShoppingRepository : injects legacy project ID
+ProjectResolver --> ShoppingRepository : injects Shopping project ID
 TodoistClient --> TodoistApi : HTTPS
 TodoistApi --> TodoistProject
 TodoistApi --> TenantProjects
 TaskListAuth --> TenantCatalog
 TenantCatalog --> SecretProvider : tokenSecretRef
 TenantCatalog --> TaskListRepository : request-scoped token
+TenantCatalog --> ShoppingRepository : request-scoped token
 
 AuthAdapter --> SecretProvider
 TodoistClient --> SecretProvider

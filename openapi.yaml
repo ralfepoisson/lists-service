@@ -1,12 +1,13 @@
 openapi: 3.1.0
 info:
   title: Life2 Lists Service REST API
-  version: 0.6.0
+  version: 0.7.0
   description: |
-    Todoist remains the system of record. Legacy Shopping is an explicitly
-    single-owner compatibility surface. Task Lists requires a verified Life2 JWT,
-    derives the tenant from its accountId claim, resolves that tenant's server-side
-    Todoist credential, and exposes the active Todoist projects visible to it.
+    Todoist remains the system of record. Shopping resolves the authenticated
+    principal's verified or deployment-bound account through the tenant catalogue.
+    Task Lists requires a verified Life2 JWT, derives the tenant from its accountId
+    claim, resolves that tenant's server-side Todoist credential, and exposes the
+    active Todoist projects visible to it.
   license:
     name: GNU General Public License v3.0
     identifier: GPL-3.0-only
@@ -523,13 +524,13 @@ components:
       type: http
       scheme: bearer
       bearerFormat: opaque-or-Life2-JWT
-      description: Strong opaque automation token or verified, account-allowed Life2 JWT.
+      description: Account-bound opaque automation token or verified Life2 JWT.
   parameters:
     ListId:
       name: listId
       in: path
       required: true
-      description: Todoist section identifier inside the configured project.
+      description: Todoist project identifier visible to the acting tenant.
       schema: { type: string, minLength: 1 }
     TaskId:
       name: taskId

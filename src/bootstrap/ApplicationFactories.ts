@@ -20,37 +20,6 @@ import type {
 } from '../application/ports/TenantTaskListServiceProvider.js';
 import type { AppConfig } from '../config/AppConfig.js';
 
-export class ShoppingListServiceFactory {
-  constructor(
-    private readonly config: AppConfig,
-    private readonly secrets: SecretProvider
-  ) {}
-
-  async create(): Promise<ShoppingListService> {
-    return this.createService();
-  }
-
-  private async createService(): Promise<ShoppingListService> {
-    const todoistToken = await this.secrets.getSecret(this.config.todoistTokenSecretArn);
-    const todoistClient = new TodoistClient({
-      baseUrl: this.config.todoistApiBaseUrl,
-      token: todoistToken,
-      transport: new FetchHttpTransport(),
-      sleeper: new TimerSleeper(),
-      maximumAttempts: 3,
-      timeoutMilliseconds: 10_000
-    });
-    const projectId =
-      this.config.todoistProjectId ??
-      (await new TodoistProjectResolver(todoistClient).resolveOrCreate(
-        this.config.todoistProjectName as string
-      ));
-    return new ShoppingListService(
-      new TodoistShoppingListRepository(todoistClient, projectId, this.config.completedLookbackDays)
-    );
-  }
-}
-
 export class TenantTaskListServiceFactory implements TenantTaskListServiceProvider {
   private readonly catalog: TenantTodoistConnectionCatalog;
 
@@ -70,8 +39,39 @@ export class TenantTaskListServiceFactory implements TenantTaskListServiceProvid
   }
 
   async forTenant(accountId: string): Promise<TaskListService> {
+    const client = await this.clientFor(accountId);
+    return new TaskListService(
+      new TodoistTaskListRepository(client, this.config.completedLookbackDays)
+    );
+  }
+
+  async shoppingForTenant(accountId: string): Promise<{
+    readonly shoppingList: ShoppingListService;
+    readonly printService: ShoppingListPrintService;
+  }> {
+    const connection = await this.catalog.connectionFor(accountId);
+    const client = this.clientForToken(connection.token);
+    const projectId =
+      connection.shoppingProjectId ??
+      (await new TodoistProjectResolver(client).resolveOrCreate(
+        connection.shoppingProjectName as string
+      ));
+    const shoppingList = new ShoppingListService(
+      new TodoistShoppingListRepository(client, projectId, this.config.completedLookbackDays)
+    );
+    return {
+      shoppingList,
+      printService: new ShoppingListPrintService(shoppingList, new PdfKitShoppingListRenderer())
+    };
+  }
+
+  private async clientFor(accountId: string): Promise<TodoistClient> {
     const token = await this.catalog.tokenFor(accountId);
-    const client = new TodoistClient({
+    return this.clientForToken(token);
+  }
+
+  private clientForToken(token: string): TodoistClient {
+    return new TodoistClient({
       baseUrl: this.config.todoistApiBaseUrl,
       token,
       transport: new FetchHttpTransport(),
@@ -79,9 +79,6 @@ export class TenantTaskListServiceFactory implements TenantTaskListServiceProvid
       maximumAttempts: 3,
       timeoutMilliseconds: 10_000
     });
-    return new TaskListService(
-      new TodoistTaskListRepository(client, this.config.completedLookbackDays)
-    );
   }
 }
 
@@ -93,24 +90,21 @@ export class RestControllerFactory {
 
   async create(): Promise<RestApiController> {
     const security = this.config.restSecurityConfiguration();
-    const [shoppingListService, restToken, life2SigningKey] = await Promise.all([
-      new ShoppingListServiceFactory(this.config, this.secrets).create(),
+    const [restToken, life2SigningKey] = await Promise.all([
       this.secrets.getSecret(security.restApiTokenSecretArn),
       this.secrets.getSecret(security.life2JwtSigningKeySecretArn)
     ]);
+    const tenantServices = new TenantTaskListServiceFactory(
+      this.config,
+      this.secrets,
+      security.todoistTenantCatalogSecretArn
+    );
     return new RestApiController(
-      shoppingListService,
       new CompositeRestAuthenticator([
-        new RestBearerAuthenticator(restToken),
+        new RestBearerAuthenticator(restToken, security.life2AllowedAccountId),
         new Life2JwtRestAuthenticator(life2SigningKey)
       ]),
-      new ShoppingListPrintService(shoppingListService, new PdfKitShoppingListRenderer()),
-      new TenantTaskListServiceFactory(
-        this.config,
-        this.secrets,
-        security.todoistTenantCatalogSecretArn
-      ),
-      security.life2AllowedAccountId
+      tenantServices
     );
   }
 }

@@ -6,12 +6,9 @@ locals {
   alexa_enabled            = var.alexa_skill_id != ""
   alexa_activation_enabled = local.alexa_enabled && var.alexa_active_version != ""
   todoist_environment = {
-    COMPLETED_LOOKBACK_DAYS  = tostring(var.completed_lookback_days)
-    LOG_LEVEL                = var.log_level
-    TODOIST_API_BASE_URL     = var.todoist_api_base_url
-    TODOIST_PROJECT_ID       = var.todoist_project_id
-    TODOIST_PROJECT_NAME     = var.todoist_project_name
-    TODOIST_TOKEN_SECRET_ARN = var.todoist_token_secret_arn
+    COMPLETED_LOOKBACK_DAYS = tostring(var.completed_lookback_days)
+    LOG_LEVEL               = var.log_level
+    TODOIST_API_BASE_URL    = var.todoist_api_base_url
   }
   rest_environment = merge(local.todoist_environment, {
     REST_API_TOKEN_SECRET_ARN         = var.rest_api_token_secret_arn
@@ -21,8 +18,10 @@ locals {
     RELEASE_GIT_COMMIT                = var.release_git_commit
   })
   alexa_environment = merge(local.todoist_environment, {
-    ALEXA_SKILL_ID     = var.alexa_skill_id
-    RELEASE_GIT_COMMIT = var.release_git_commit
+    ALEXA_SKILL_ID                    = var.alexa_skill_id
+    LIFE2_ALLOWED_ACCOUNT_ID          = var.life2_allowed_account_id
+    TODOIST_TENANT_CATALOG_SECRET_ARN = var.todoist_tenant_catalog_secret_arn
+    RELEASE_GIT_COMMIT                = var.release_git_commit
   })
 }
 
@@ -87,7 +86,6 @@ data "aws_iam_policy_document" "rest_runtime" {
     actions = ["secretsmanager:GetSecretValue"]
     resources = concat(
       [
-        var.todoist_token_secret_arn,
         var.todoist_tenant_catalog_secret_arn,
         var.rest_api_token_secret_arn,
         var.life2_jwt_signing_key_secret_arn
@@ -107,10 +105,13 @@ data "aws_iam_policy_document" "alexa_runtime" {
   }
 
   statement {
-    sid       = "ReadTodoistTokenOnly"
-    effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [var.todoist_token_secret_arn]
+    sid     = "ReadTenantBoundTodoistConnection"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = concat(
+      [var.todoist_tenant_catalog_secret_arn],
+      var.todoist_tenant_token_secret_arns
+    )
   }
 }
 

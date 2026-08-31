@@ -5,8 +5,6 @@ import { ConfigurationError } from '../../src/domain/errors.js';
 
 describe('AppConfig', () => {
   const completeEnvironment = {
-    TODOIST_TOKEN_SECRET_ARN: 'arn:aws:secretsmanager:eu-west-1:123456789012:secret:todoist',
-    TODOIST_PROJECT_ID: 'project-id',
     REST_API_TOKEN_SECRET_ARN: 'arn:aws:secretsmanager:eu-west-1:123456789012:secret:rest',
     LIFE2_JWT_SIGNING_KEY_SECRET_ARN:
       'arn:aws:secretsmanager:eu-west-1:123456789012:secret:life2-jwt',
@@ -20,7 +18,6 @@ describe('AppConfig', () => {
   it('loads valid cold-start configuration', () => {
     const config = AppConfig.fromRestEnvironment(completeEnvironment);
 
-    expect(config.todoistProjectId).toBe('project-id');
     expect(config.completedLookbackDays).toBe(90);
     expect(config.life2AllowedAccountId).toBe('account-123');
     expect(config.todoistTenantCatalogSecretArn).toContain('todoist-catalog');
@@ -36,35 +33,19 @@ describe('AppConfig', () => {
     expect(config.alexaSkillId).toBeUndefined();
   });
 
-  it('loads the Alexa runtime without granting or configuring REST credentials', () => {
+  it('loads the Alexa runtime as a tenant-bound service principal without REST credentials', () => {
     const config = AppConfig.fromAlexaEnvironment({
-      TODOIST_TOKEN_SECRET_ARN: completeEnvironment.TODOIST_TOKEN_SECRET_ARN,
-      TODOIST_PROJECT_ID: completeEnvironment.TODOIST_PROJECT_ID,
       ALEXA_SKILL_ID: completeEnvironment.ALEXA_SKILL_ID,
+      LIFE2_ALLOWED_ACCOUNT_ID: completeEnvironment.LIFE2_ALLOWED_ACCOUNT_ID,
+      TODOIST_TENANT_CATALOG_SECRET_ARN: completeEnvironment.TODOIST_TENANT_CATALOG_SECRET_ARN,
       LOG_LEVEL: completeEnvironment.LOG_LEVEL
     });
 
     expect(config.alexaSkillId).toBe(completeEnvironment.ALEXA_SKILL_ID);
     expect(config.restApiTokenSecretArn).toBeUndefined();
     expect(config.life2JwtSigningKeySecretArn).toBeUndefined();
-    expect(config.life2AllowedAccountId).toBeUndefined();
-    expect(config.todoistTenantCatalogSecretArn).toBeUndefined();
-  });
-
-  it('accepts a project name when an id is not configured', () => {
-    const environment = { ...completeEnvironment, TODOIST_PROJECT_ID: undefined };
-    const config = AppConfig.fromRestEnvironment({
-      ...environment,
-      TODOIST_PROJECT_NAME: 'Shopping'
-    });
-
-    expect(config.todoistProjectName).toBe('Shopping');
-  });
-
-  it('fails when neither project id nor project name is configured', () => {
-    const environment = { ...completeEnvironment, TODOIST_PROJECT_ID: undefined };
-
-    expect(() => AppConfig.fromRestEnvironment(environment)).toThrowError(ConfigurationError);
+    expect(config.life2AllowedAccountId).toBe('account-123');
+    expect(config.todoistTenantCatalogSecretArn).toContain('todoist-catalog');
   });
 
   it('rejects a completed history window over the provider maximum', () => {

@@ -1,5 +1,8 @@
 # ADR 0005: Select tenant Todoist projects through a server-side catalogue
 
+> Shopping/Alexa identity details in this decision are superseded by
+> [ADR 0006](0006-bind-all-shopping-channels-to-tenant-catalogue.md).
+
 ## Status
 
 Accepted and implemented on 18 August 2026. This decision supersedes ADR 0004

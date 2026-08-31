@@ -27,14 +27,18 @@ describe('LocalRestApplicationComposition', () => {
       directory,
       'tenant-catalog',
       JSON.stringify({
-        connections: [{ accountId: 'account-123', tokenSecretRef: todoistToken }]
+        connections: [
+          {
+            accountId: 'account-123',
+            tokenSecretRef: todoistToken,
+            shoppingProjectId: 'shopping-project'
+          }
+        ]
       })
     );
 
     const application = await LocalRestApplicationComposition.create({
       SECRET_PROVIDER: 'file',
-      TODOIST_TOKEN_SECRET_ARN: todoistToken,
-      TODOIST_PROJECT_ID: 'shopping-project',
       REST_API_TOKEN_SECRET_ARN: restToken,
       LIFE2_JWT_SIGNING_KEY_SECRET_ARN: signingKey,
       LIFE2_ALLOWED_ACCOUNT_ID: 'account-123',

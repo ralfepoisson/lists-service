@@ -4,11 +4,13 @@ Public `GET /version` publishes schema version `1`, the SemVer from
 `package.json`, and the immutable Lambda/container release revision without
 requiring Todoist access or authentication.
 
-`lists-service` is a private shopping-list and tenant-scoped task-list service.
+`lists-service` is a private, tenant-scoped shopping-list and task-list service.
 Todoist is the sole system of record for list and task content. For Task Lists,
 each Todoist project visible through a tenant's server-managed connection is a
-named list. The legacy Shopping/Alexa surface remains deliberately separate and
-uses its original owner token and configured project. The same object-oriented
+named list. Shopping, Task Lists, REST automation, and Alexa all resolve a
+protected server-side tenant catalogue entry. REST automation and each Alexa
+deployment are explicit tenant-bound service principals; neither can select an
+account at request time. The same object-oriented
 application layer powers:
 
 - an authenticated REST API for the Life2 webapp and personal automations; and
@@ -72,7 +74,9 @@ entry points share domain and transport primitives while retaining distinct
 identity boundaries. REST derives Task Lists tenancy only from a verified Life2
 JWT `accountId`, resolves that account in a protected server-side catalogue,
 then loads the separately protected Todoist token named by the catalogue entry.
-Alexa and legacy Shopping continue to use the configured owner token/project.
+Legacy Shopping uses the verified or service-principal `accountId` to select a
+tenant token, then resolves the configured Shopping project within only that
+provider account. Alexa uses its deployment-bound account in the same way.
 
 See the [architecture guide](docs/architecture.md), authoritative
 [package diagram](docs/architecture/solution-architecture.puml),
@@ -97,18 +101,18 @@ npm ci
 
 ## Todoist setup
 
-### Legacy Shopping and Alexa
+### Tenant-scoped Shopping and Alexa
 
 1. Choose a dedicated Todoist project name, for example `Household Shopping`.
 2. Open Todoist **Settings → Integrations → Developer** and copy the personal
    API token.
-3. Create an AWS Secrets Manager secret whose entire string value is that
-   token. Do not put it in this repository, Terraform variables, shell history,
-   or a populated `.env` file.
-4. Prefer an existing project's stable ID in `TODOIST_PROJECT_ID`. When only
-   `TODOIST_PROJECT_NAME` is configured, service initialization reuses the one
-   exact match or creates the project if no exact match exists. Multiple exact
-   matches remain a configuration error.
+3. Store the token in the separately protected secret referenced by that
+   tenant's catalogue entry. Do not put it in this repository, Terraform
+   variables, shell history, or a populated `.env` file.
+4. Prefer an existing project's stable ID as the catalogue
+   `shoppingProjectId`. When only `shoppingProjectName` is configured, service
+   initialization reuses the one exact match or creates the project if no
+   exact match exists. Multiple exact matches remain a configuration error.
 
 If only the exact project name is known, resolve it once:
 
@@ -119,9 +123,10 @@ npm run resolve:project
 ```
 
 The explicit utility prints only the resolved ID and never creates a project.
-Persist that value as the Terraform `todoist_project_id` when stable-ID
-operation is preferred. Name-based service initialization resolves or creates
-once per process; normal item operations never scan all projects.
+Persist that value as the acting account's catalogue `shoppingProjectId` when
+stable-ID operation is preferred. Name-based service initialization from
+`shoppingProjectName` resolves or creates once per process; normal item
+operations never scan all projects.
 
 The implementation uses the current unified Todoist API v1 at
 `https://api.todoist.com/api/v1`, bearer authentication, cursor pagination,
@@ -132,11 +137,12 @@ history. See [Todoist contract notes](docs/api.md#todoist-provider-contract).
 
 Task Lists does not reuse the static automation identity or accept a provider
 token from the browser. Provision a protected JSON catalogue whose only field
-is `connections`; every entry must contain exactly one unique `accountId` and
-one `tokenSecretRef`. Store each referenced token in its own protected secret
+is `connections`; every entry must contain exactly one unique `accountId`, one
+`tokenSecretRef`, and exactly one `shoppingProjectId` or `shoppingProjectName`.
+Store each referenced token in its own protected secret
 and grant the REST runtime access only to the catalogue and explicitly listed
 tenant token secrets. A missing account entry is `not_connected`; it never
-falls back to the legacy token.
+falls back to another tenant's token.
 
 Authenticated `/v1/task-lists` operations enumerate the connected tenant's
 existing Todoist projects, create projects, and let callers list, add, edit,
@@ -147,18 +153,19 @@ archived.
 
 ## AWS secrets
 
-Create the legacy runtime secrets plus the tenant catalogue:
+Create the runtime credentials and tenant catalogue:
 
-- Legacy Todoist token: retained for Shopping and Alexa only.
-- Tenant connection catalogue: JSON containing only unique `accountId` and
-  `tokenSecretRef` pairs; it contains no Todoist token values.
+- Tenant connection catalogue: JSON containing unique `accountId`,
+  `tokenSecretRef`, and per-tenant Shopping project selectors; it contains no
+  Todoist token values.
 - One separately protected Todoist token secret for every catalogue entry.
-- Strong REST bearer token: readable only by the REST function.
+- Strong REST bearer token: readable only by the REST function and bound by
+  configuration to one explicit `accountId` service principal.
 - Base64-encoded Life2 HS256 signing key: readable only by the REST function.
 
 Use the AWS console's masked secret editor, or a secret-safe operational
-workflow approved for the workstation. Terraform accepts only the two secret
-ARNs and never provisions their values. The signing-key secret must contain the
+workflow approved for the workstation. Terraform accepts only secret
+references and never provisions their values. The signing-key secret must contain the
 same base64 text used by the Auth Service's `LIFE2_JWT_SIGNING_KEY_BASE64`;
 never expose it to the browser. Generate the REST token with a
 cryptographically secure password generator; do not reuse another credential.
@@ -181,15 +188,18 @@ npm run invoke:alexa -- tests/fixtures/alexa/launch-request.json
 For the fixture invocation, set `ALEXA_SKILL_ID` to the fixture application ID
 or update the placeholder in a private, uncommitted fixture.
 
-The Life2 root launcher provides the supported container integration. It starts
-the optional Lists API automatically when both ignored files exist:
+The Life2 root launcher provides the supported container integration. Its
+preferred configuration is a protected tenant catalogue plus a directory of
+separate tenant token files. The former one-account files remain a
+backward-compatible local bootstrap format and are converted into the same
+catalogue boundary before startup:
 
 - `.life2-local/secrets/lists-todoist-token`; and
 - `.life2-local/config/lists-allowed-account-id`.
 
 The launcher mounts secrets read-only, derives the JWT verification-key file
-from the same local Auth signing key, generates a one-account local catalogue
-whose token reference points at the existing mounted token, and routes
+from the same local Auth signing key, generates or validates the local
+catalogue whose token references point at read-only mounted files, and routes
 `/api/lists/` through Nginx.
 
 Engineering work must follow the
@@ -320,10 +330,12 @@ Alexa, ask Household List to clear completed items
 
 ## REST API
 
-`GET /health` is public. Protected legacy Shopping routes accept the strong
-static automation token or the configured owner's verified Life2 JWT. Task
-Lists and Todoist connection routes require a verified Life2 JWT; the static
-automation token receives `403` and can never select a tenant connection.
+`GET /health` is public. Protected Shopping routes resolve their Todoist
+connection from the authenticated principal's verified or deployment-bound
+`accountId`. The strong automation token is a deployment-bound service
+principal and cannot choose a tenant. Task Lists and Todoist connection routes
+require a verified Life2 JWT; automation receives `403` on those broader
+project-management routes.
 
 ```text
 Authorization: Bearer <REST_API_TOKEN>
@@ -404,7 +416,7 @@ status codes are in [the API guide](docs/api.md).
 ## Troubleshooting
 
 - **Cold-start configuration error:** check all required environment variables
-  and ensure the legacy project plus tenant catalogue/token references are valid.
+  and ensure the tenant catalogue/token references and Shopping project are valid.
 - **Named project is absent:** initialization creates it once. If multiple exact
   name matches exist, remove the ambiguity or configure a stable project ID.
 - **401 from this API:** verify the `Bearer` scheme and Life2 token claims/signature.
@@ -441,8 +453,9 @@ status codes are in [the API guide](docs/api.md).
 - Task Lists supports multiple Life2 accounts through the server-side catalogue,
   with one Todoist connection per `accountId`. It does not provide browser
   onboarding, disconnect, token refresh, or per-user (`sub`) connections.
-- Static automation and Alexa remain bound to the legacy owner/project and are
-  not multitenant Task Lists identities.
+- Static automation and Alexa are explicit deployment-bound service principals.
+  Each resolves Shopping through the catalogue entry for its configured
+  `accountId`; neither can submit or override an account identifier.
 - `GET /v1/items.pdf` renders the current active Todoist items as a transient
   A4 PDF download. The service stores no generated file and the webapp exposes
   it through the Shopping page's **Print** button.

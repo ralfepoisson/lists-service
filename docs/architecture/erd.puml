@@ -8,7 +8,7 @@ skinparam shadowing false
 note as StatusNote
   IMPLEMENTED LOGICAL MODEL - NOT A LOCAL DATABASE
   Todoist remains the system of record.
-  Legacy provider fields were checked against Todoist API v1.
+  Provider fields were checked against Todoist API v1.
   Tenant catalogue/project mapping has local automated evidence;
   multitenant live-provider and deployment evidence remain pending.
 end note
@@ -34,13 +34,12 @@ entity "Todoist Task / ShoppingListItem" as Item {
 }
 
 entity "Runtime Configuration" as Configuration {
-  * legacyTodoistTokenSecretReference : secret reference
+  shoppingTodoistProjectId : string [preferred]
   --
-  legacyTodoistProjectId : string [preferred]
-  legacyTodoistProjectName : string [fallback]
+  shoppingTodoistProjectName : string [fallback]
   * restApiTokenSecretReference : secret reference
   * life2JwtSigningKeySecretReference : secret reference
-  * legacyOwnerAccountId : identifier
+  * servicePrincipalAccountId : identifier
   * tenantCatalogSecretReference : secret reference
   alexaSkillId : string [only after real skill creation]
   * releaseGitCommit : sha1
@@ -54,6 +53,8 @@ entity "Tenant Todoist connection catalogue entry" as Connection {
   * accountId : Life2 tenant identifier
   --
   * tokenSecretRef : secret reference
+  shoppingProjectId : provider identity [xor]
+  shoppingProjectName : string [xor]
 }
 
 entity "Protected tenant Todoist token" as TenantToken {
@@ -74,7 +75,7 @@ Project ||--o{ Item : contains
 Connection ..> Project : token exposes existing lists
 Connection ||--|| TenantToken : references
 Configuration ..> Connection : loads catalogue
-Configuration ..> Project : selects legacy Shopping project
+Configuration ..> Project : selects tenant Shopping project
 Project ||..o{ SearchHit : projected on demand
 Item ||..o{ SearchHit : active tasks projected on demand
 
@@ -82,7 +83,7 @@ note right of Configuration
   Stores references and identifiers only.
   Secret values are retrieved at runtime from
   AWS Secrets Manager or local read-only files.
-  The legacy name-only project is created when absent.
+  The name-only Shopping project is created when absent.
   Task Lists enumerates projects through the token selected
   exclusively by the verified JWT accountId.
   This is configuration, not persisted
@@ -99,7 +100,7 @@ end note
 
 note bottom of Item
   GET /v1/items.pdf reads active tasks and renders a transient
-  legacy Shopping snapshot. No PDF or list entity is persisted.
+  tenant Shopping snapshot. No PDF or list entity is persisted.
 end note
 
 note bottom of SearchHit

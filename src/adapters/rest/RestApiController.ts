@@ -1,5 +1,3 @@
-import type { ShoppingListService } from '../../application/ShoppingListService.js';
-import type { ShoppingListPrintService } from '../../application/ShoppingListPrintService.js';
 import type { TaskListService } from '../../application/TaskListService.js';
 import type { ItemStatus } from '../../application/ports/ShoppingListRepository.js';
 import type { TenantTaskListServiceProvider } from '../../application/ports/TenantTaskListServiceProvider.js';
@@ -30,11 +28,8 @@ export interface RestResponse {
 
 export class RestApiController {
   constructor(
-    private readonly service: ShoppingListService,
     private readonly authenticator: RestAuthenticator,
-    private readonly printService: ShoppingListPrintService,
-    private readonly taskListServices: TenantTaskListServiceProvider,
-    private readonly legacyOwnerAccountId: string
+    private readonly taskListServices: TenantTaskListServiceProvider
   ) {}
 
   async handle(request: RestRequest): Promise<RestResponse> {
@@ -81,7 +76,9 @@ export class RestApiController {
     principal: RestPrincipal
   ): Promise<RestResponse> {
     if (request.method === 'GET' && request.path === '/health/ready') {
-      const isReady = await this.service.isReady();
+      const tenant = this.requireTenantPrincipal(principal);
+      const { shoppingList } = await this.taskListServices.shoppingForTenant(tenant.accountId);
+      const isReady = await shoppingList.isReady();
       return this.success(
         isReady ? 200 : 503,
         { status: isReady ? 'ready' : 'not_ready' },
@@ -121,8 +118,9 @@ export class RestApiController {
       );
     }
     if (request.path === '/v1/items.pdf' && request.method === 'GET') {
-      this.requireLegacyAccess(principal);
-      const document = await this.printService.generate();
+      const tenant = this.requireTenantPrincipal(principal);
+      const { printService } = await this.taskListServices.shoppingForTenant(tenant.accountId);
+      const document = await printService.generate();
       return {
         statusCode: 200,
         headers: {
@@ -135,15 +133,17 @@ export class RestApiController {
       };
     }
     if (request.path === '/v1/items' && request.method === 'GET') {
-      this.requireLegacyAccess(principal);
+      const tenant = this.requireTenantPrincipal(principal);
+      const { shoppingList } = await this.taskListServices.shoppingForTenant(tenant.accountId);
       const status = this.parseStatus(request.query['status']);
-      const items = await this.service.list(status);
+      const items = await shoppingList.list(status);
       return this.success(200, items, request.requestId, { count: items.length });
     }
     if (request.path === '/v1/items' && request.method === 'POST') {
-      this.requireLegacyAccess(principal);
+      const tenant = this.requireTenantPrincipal(principal);
+      const { shoppingList } = await this.taskListServices.shoppingForTenant(tenant.accountId);
       const content = this.parseAddBody(request.body);
-      const result = await this.service.add(content);
+      const result = await shoppingList.add(content);
       return this.success(result.alreadyExists ? 200 : 201, result.item, request.requestId, {
         alreadyExists: result.alreadyExists
       });
@@ -153,10 +153,11 @@ export class RestApiController {
       request.method === 'DELETE' &&
       request.query['status'] === 'completed'
     ) {
-      this.requireLegacyAccess(principal);
+      const tenant = this.requireTenantPrincipal(principal);
+      const { shoppingList } = await this.taskListServices.shoppingForTenant(tenant.accountId);
       const isConfirmed =
         request.headers['x-confirm-destructive-action']?.toLocaleLowerCase('en-GB') === 'true';
-      const deletedCount = await this.service.clearCompleted(isConfirmed);
+      const deletedCount = await shoppingList.clearCompleted(isConfirmed);
       return this.success(200, { deletedCount }, request.requestId);
     }
     if (request.path === '/v1/task-lists' || request.path.startsWith('/v1/task-lists/')) {
@@ -169,19 +170,20 @@ export class RestApiController {
 
     const itemRoute = /^\/v1\/items\/([^/]+?)(?:\/(complete|reopen))?$/u.exec(request.path);
     if (itemRoute !== null) {
-      this.requireLegacyAccess(principal);
+      const tenant = this.requireTenantPrincipal(principal);
+      const { shoppingList } = await this.taskListServices.shoppingForTenant(tenant.accountId);
       const itemId = decodeURIComponent(itemRoute[1] as string);
       const action = itemRoute[2];
       if (request.method === 'DELETE' && action === undefined) {
-        await this.service.deleteById(itemId);
+        await shoppingList.deleteById(itemId);
         return this.success(200, { deleted: true }, request.requestId);
       }
       if (request.method === 'POST' && action === 'complete') {
-        await this.service.completeById(itemId);
+        await shoppingList.completeById(itemId);
         return this.success(200, { completed: true }, request.requestId);
       }
       if (request.method === 'POST' && action === 'reopen') {
-        await this.service.reopenById(itemId);
+        await shoppingList.reopenById(itemId);
         return this.success(200, { reopened: true }, request.requestId);
       }
     }
@@ -276,10 +278,9 @@ export class RestApiController {
     return principal;
   }
 
-  private requireLegacyAccess(principal: RestPrincipal): void {
-    if (principal.authMethod === 'life2' && principal.accountId !== this.legacyOwnerAccountId) {
-      throw new AuthorizationForbiddenError();
-    }
+  private requireTenantPrincipal(principal: RestPrincipal): RestPrincipal {
+    if (!principal.accountId) throw new AuthorizationForbiddenError();
+    return principal;
   }
 
   private parseStatus(value: string | undefined): ItemStatus {

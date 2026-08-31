@@ -3,11 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { RestBearerAuthenticator } from '../../src/adapters/rest/RestBearerAuthenticator.js';
 
 describe('RestBearerAuthenticator', () => {
-  const authenticator = new RestBearerAuthenticator('correct-secret-token');
+  const authenticator = new RestBearerAuthenticator('correct-secret-token', 'account-123');
 
   it('accepts the configured bearer token', () => {
     expect(authenticator.authenticate('Bearer correct-secret-token')).toEqual({
-      authMethod: 'automation'
+      authMethod: 'automation',
+      accountId: 'account-123'
     });
   });
 

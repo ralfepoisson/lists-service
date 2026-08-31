@@ -1,5 +1,8 @@
 # ADR 0002: Todoist as the system of record
 
+> Global Shopping project configuration in this decision is superseded by the
+> per-account catalogue selector in [ADR 0006](0006-bind-all-shopping-channels-to-tenant-catalogue.md).
+
 - **Status:** Accepted and implemented; real provider not yet verified
 - **Date:** 2026-07-31
 - **Requirements:** `LST-SCP-002`, `LST-TOD-004`

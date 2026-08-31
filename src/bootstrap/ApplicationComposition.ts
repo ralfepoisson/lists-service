@@ -10,7 +10,7 @@ import type { ShoppingListService } from '../application/ShoppingListService.js'
 import type { OperationalLogger } from '../application/ports/OperationalLogger.js';
 import type { SecretProvider } from '../application/ports/SecretProvider.js';
 import { AppConfig } from '../config/AppConfig.js';
-import { RestControllerFactory, ShoppingListServiceFactory } from './ApplicationFactories.js';
+import { RestControllerFactory, TenantTaskListServiceFactory } from './ApplicationFactories.js';
 
 class CompositionDependencies {
   readonly config: AppConfig;
@@ -26,8 +26,15 @@ class CompositionDependencies {
     this.logger = new JsonConsoleLogger(this.config.logLevel);
   }
 
-  async createService(): Promise<ShoppingListService> {
-    return new ShoppingListServiceFactory(this.config, this.secrets).create();
+  async createTenantShoppingService(): Promise<ShoppingListService> {
+    const tenant = this.config.tenantConnectionConfiguration();
+    return (
+      await new TenantTaskListServiceFactory(
+        this.config,
+        this.secrets,
+        tenant.todoistTenantCatalogSecretArn
+      ).shoppingForTenant(tenant.life2AllowedAccountId)
+    ).shoppingList;
   }
 }
 
@@ -59,7 +66,7 @@ export class AlexaApplicationComposition {
     environment: NodeJS.ProcessEnv = process.env
   ): Promise<AlexaApplicationComposition> {
     const dependencies = new CompositionDependencies(environment, 'alexa');
-    const service = await dependencies.createService();
+    const service = await dependencies.createTenantShoppingService();
     return new AlexaApplicationComposition(
       new AlexaSkillFactory(
         service,

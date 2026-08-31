@@ -26,12 +26,6 @@ variable "environment" {
   }
 }
 
-variable "todoist_token_secret_arn" {
-  description = "ARN of an existing Secrets Manager secret containing only the Todoist token."
-  type        = string
-  sensitive   = true
-}
-
 variable "todoist_tenant_catalog_secret_arn" {
   description = "ARN of the server-side accountId to Todoist token-secret reference catalogue."
   type        = string
@@ -69,23 +63,6 @@ variable "life2_allowed_account_id" {
     condition     = trimspace(var.life2_allowed_account_id) != ""
     error_message = "life2_allowed_account_id must not be empty."
   }
-}
-
-variable "todoist_project_id" {
-  description = "Preferred Todoist project ID. Set either this or todoist_project_name."
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = trimspace(var.todoist_project_id) != "" || trimspace(var.todoist_project_name) != ""
-    error_message = "Set either todoist_project_id or todoist_project_name."
-  }
-}
-
-variable "todoist_project_name" {
-  description = "Todoist project name to resolve once at cold start when no project ID is supplied."
-  type        = string
-  default     = ""
 }
 
 variable "alexa_skill_id" {

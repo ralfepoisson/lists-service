@@ -19,8 +19,12 @@ describe('TenantTodoistConnectionCatalog', () => {
       new MemorySecrets({
         catalog: JSON.stringify({
           connections: [
-            { accountId: 'tenant-a', tokenSecretRef: 'token-a' },
-            { accountId: 'tenant-b', tokenSecretRef: 'token-b' }
+            { accountId: 'tenant-a', tokenSecretRef: 'token-a', shoppingProjectId: 'project-a' },
+            {
+              accountId: 'tenant-b',
+              tokenSecretRef: 'token-b',
+              shoppingProjectName: 'Tenant B Shopping'
+            }
           ]
         }),
         'token-a': 'secret-a',
@@ -31,16 +35,37 @@ describe('TenantTodoistConnectionCatalog', () => {
 
     await expect(catalog.tokenFor('tenant-a')).resolves.toBe('secret-a');
     await expect(catalog.tokenFor('tenant-b')).resolves.toBe('secret-b');
+    await expect(catalog.connectionFor('tenant-a')).resolves.toEqual({
+      token: 'secret-a',
+      shoppingProjectId: 'project-a'
+    });
+    await expect(catalog.connectionFor('tenant-b')).resolves.toEqual({
+      token: 'secret-b',
+      shoppingProjectName: 'Tenant B Shopping'
+    });
     await expect(catalog.tokenFor('tenant-c')).rejects.toBeInstanceOf(TodoistNotConnectedError);
   });
 
   it.each([
     'not-json',
-    JSON.stringify({ connections: [{ accountId: 'a', tokenSecretRef: 'x', token: 'leak' }] }),
+    JSON.stringify({
+      connections: [{ accountId: 'a', tokenSecretRef: 'x', shoppingProjectId: 'p', token: 'leak' }]
+    }),
+    JSON.stringify({ connections: [{ accountId: 'a', tokenSecretRef: 'x' }] }),
     JSON.stringify({
       connections: [
-        { accountId: 'a', tokenSecretRef: 'x' },
-        { accountId: 'a', tokenSecretRef: 'y' }
+        {
+          accountId: 'a',
+          tokenSecretRef: 'x',
+          shoppingProjectId: 'p',
+          shoppingProjectName: 'Shopping'
+        }
+      ]
+    }),
+    JSON.stringify({
+      connections: [
+        { accountId: 'a', tokenSecretRef: 'x', shoppingProjectId: 'p' },
+        { accountId: 'a', tokenSecretRef: 'y', shoppingProjectId: 'q' }
       ]
     })
   ])('fails closed for a malformed catalogue', async (value) => {

@@ -20,7 +20,9 @@ import { InMemoryTaskListRepository } from '../support/InMemoryTaskListRepositor
 
 class FixtureAuthenticator implements RestAuthenticator {
   authenticate(header: string | undefined): RestPrincipal | undefined {
-    if (header === 'Bearer rest-secret') return { authMethod: 'automation' };
+    if (header === 'Bearer rest-secret') {
+      return { authMethod: 'automation', accountId: 'account-123' };
+    }
     if (header === 'Bearer life2-tenant') {
       return {
         authMethod: 'life2',
@@ -46,29 +48,41 @@ class RestControllerFixture {
     new ShoppingListItem('1', 'milk', false),
     new ShoppingListItem('2', 'bread', true)
   ]);
+  readonly otherRepository = new InMemoryShoppingListRepository([
+    new ShoppingListItem('other-1', 'tenant-b-item', false)
+  ]);
   readonly taskListRepository = new InMemoryTaskListRepository();
   readonly taskListService = new TaskListService(this.taskListRepository);
   readonly requestedTenantIds: string[] = [];
-  readonly controller = new RestApiController(
-    new ShoppingListService(this.repository),
-    new FixtureAuthenticator(),
-    new ShoppingListPrintService(
-      new ShoppingListService(this.repository),
-      new PdfKitShoppingListRenderer(),
-      () => new Date('2026-08-17T08:30:00.000Z')
-    ),
-    {
-      connectionStatus: async (accountId): Promise<TodoistConnectionStatus> => ({
-        status: accountId === 'account-123' ? 'connected' : 'not_connected',
-        canManageConnection: false
-      }),
-      forTenant: async (accountId): Promise<TaskListService> => {
-        this.requestedTenantIds.push(accountId);
-        return this.taskListService;
-      }
+  readonly controller = new RestApiController(new FixtureAuthenticator(), {
+    connectionStatus: async (accountId): Promise<TodoistConnectionStatus> => ({
+      status: ['account-123', 'account-456'].includes(accountId) ? 'connected' : 'not_connected',
+      canManageConnection: false
+    }),
+    forTenant: async (accountId): Promise<TaskListService> => {
+      this.requestedTenantIds.push(accountId);
+      return this.taskListService;
     },
-    'account-123'
-  );
+    shoppingForTenant: async (
+      accountId
+    ): Promise<{
+      readonly shoppingList: ShoppingListService;
+      readonly printService: ShoppingListPrintService;
+    }> => {
+      this.requestedTenantIds.push(accountId);
+      const shoppingList = new ShoppingListService(
+        accountId === 'account-456' ? this.otherRepository : this.repository
+      );
+      return {
+        shoppingList,
+        printService: new ShoppingListPrintService(
+          shoppingList,
+          new PdfKitShoppingListRenderer(),
+          () => new Date('2026-08-17T08:30:00.000Z')
+        )
+      };
+    }
+  });
 
   request(overrides: Partial<RestRequest>): RestRequest {
     return {
@@ -101,7 +115,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body)).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.6.0',
+        version: '0.7.0',
         revision: 'lists-test-revision'
       });
     } finally {
@@ -335,12 +349,12 @@ describe('RestApiController', () => {
       canManageConnection: false
     });
     expect(JSON.parse(otherTenant.body).data).toEqual({
-      status: 'not_connected',
+      status: 'connected',
       canManageConnection: false
     });
   });
 
-  it('does not expose the legacy Shopping projection to another Life2 tenant', async () => {
+  it('resolves Shopping from each verified tenant connection', async () => {
     const fixture = new RestControllerFixture();
     const response = await fixture.controller.handle(
       fixture.request({
@@ -348,8 +362,10 @@ describe('RestApiController', () => {
         headers: { authorization: 'Bearer life2-other' }
       })
     );
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('tenant-b-item');
     expect(response.body).not.toContain('milk');
+    expect(fixture.requestedTenantIds).toEqual(['account-456']);
   });
 
   it('supports nested task create, edit, complete, delete, and list routes', async () => {

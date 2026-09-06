@@ -7,7 +7,10 @@ requiring Todoist access or authentication.
 `lists-service` is a private, tenant-scoped shopping-list and task-list service.
 Todoist is the sole system of record for list and task content. For Task Lists,
 each Todoist project visible through a tenant's server-managed connection is a
-named list. Shopping, Task Lists, REST automation, and Alexa all resolve a
+named list. Task responses optionally include `priority` from 1 (highest) through
+4 (lowest). Todoist's inverse API scale is normalized at the adapter; an absent
+provider value stays omitted. No priority-write controls are added. Shopping,
+Task Lists, REST automation, and Alexa all resolve a
 protected server-side tenant catalogue entry. REST automation and each Alexa
 deployment are explicit tenant-bound service principals; neither can select an
 account at request time. The same object-oriented

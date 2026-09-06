@@ -4,6 +4,21 @@ This is the durable, newest-first engineering record for `lists-service`.
 Prepend new entries immediately below this introduction. Do not include secrets,
 credentials, full Alexa payloads, or sensitive shopping-item content.
 
+## 2026-09-05 — Normalized Task Lists priority
+
+- **Status:** implemented; full maintained validation passed; deployed acceptance pending.
+- **Scope:** optional task read priority1highest through4lowest, Todoist projection only.
+- **Requirements:** LST-TOD-005, LST-SCP-002.
+- **Design:** map provider priority to 5 minus raw value, omit unavailable values,
+  reject malformed present priorities; keep content mutation payloads unchanged.
+- **Official reference:** [Todoist API v1](https://developer.todoist.com/api/v1/)
+  checked September5: raw1normal through4urgent.
+- **TDD evidence:** Node24 `node_modules/vitest/vitest.mjs run tests/adapters/TodoistTaskListRepository.test.ts`
+  red6failed7passed, then green13passed. No real-provider calls; unit transport fixtures only.
+- **Documentation:** README, API/OpenAPI, requirements and both PlantUML diagrams updated;
+  combined version0.8.0. Root handoff entry `2026-09-05-task-priority-projection--codex.md`
+  records final validation; parent owns local deployment and served acceptance.
+
 ## Entry template
 
 ### YYYY-MM-DD HH:MM TZ — Short change title

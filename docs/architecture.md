@@ -68,6 +68,7 @@ The domain owns shopping-list concepts and deterministic policy without knowing
 about Lambda, Alexa, API Gateway, Secrets Manager, or Todoist transport:
 
 - `ShoppingListItem`, `TaskList`, and ordered `TaskListTask` read models;
+- optional TaskListTask priority normalized to 1 highest through 4 lowest only in the Todoist adapter;
 - normalized item-content value object;
 - deterministic matcher and match-result types;
 - domain/application error types.

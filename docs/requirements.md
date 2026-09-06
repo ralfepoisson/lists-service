@@ -130,3 +130,11 @@ CloudWatch works in reality.
 The service must not be described as production-ready until every applicable
 security criterion and functional acceptance criterion has current evidence.
 Passing tests alone does not prove external integrations or deployment.
+
+### Task priority read projection (2026-09-05)
+
+LST-TOD-005 now includes optional TaskListTask priority1highest..4lowest, mapped
+from Todoist's inverse API scale without modifying provider task priority.
+`tests/adapters/TodoistTaskListRepository.test.ts` covers all four values,
+omitted completed-history priority and malformed values. Unit verification does
+not claim real-provider or deployed acceptance.

@@ -29,6 +29,7 @@ entity "Todoist Task / ShoppingListItem" as Item {
   description : string [0..1]
   * isCompleted : boolean
   childOrder : integer
+  priority : integer 1..4 [TaskListTask, optional]
   createdAt : timestamp [0..1]
   completedAt : timestamp [0..1]
 }

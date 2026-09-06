@@ -4,6 +4,7 @@ export class TaskListTask {
     readonly listId: string,
     readonly content: string,
     readonly isCompleted: boolean,
-    readonly position: number
+    readonly position: number,
+    readonly priority?: number
   ) {}
 }

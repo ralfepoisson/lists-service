@@ -38,6 +38,67 @@ const createRepository = (transport: HttpTransport): TodoistTaskListRepository =
   );
 
 describe('TodoistTaskListRepository', () => {
+  it('normalizes Todoist priorities from urgent 4 to P1 and normal 1 to P4', async () => {
+    const transport = new ScriptedTransport([
+      json({ id: 'project-1', name: 'Home', child_order: 1, inbox_project: false }),
+      json({
+        results: [4, 3, 2, 1].map((priority, index) => ({
+          id: `task-${index}`,
+          project_id: 'project-1',
+          section_id: null,
+          content: 'Task',
+          child_order: index,
+          priority
+        })),
+        next_cursor: null
+      })
+    ]);
+    const tasks = await createRepository(transport).listTasks('project-1', 'active');
+    expect(tasks.map((task) => Reflect.get(task, 'priority'))).toEqual([1, 2, 3, 4]);
+  });
+
+  it('preserves omitted provider priority without inventing one for completed history', async () => {
+    const transport = new ScriptedTransport([
+      json({ id: 'project-1', name: 'Home', child_order: 1, inbox_project: false }),
+      json({
+        items: [
+          {
+            id: 'task-1',
+            project_id: 'project-1',
+            section_id: null,
+            content: 'Task',
+            child_order: 1
+          }
+        ],
+        next_cursor: null
+      })
+    ]);
+    const tasks = await createRepository(transport).listTasks('project-1', 'completed');
+    expect(JSON.parse(JSON.stringify(tasks[0]))).not.toHaveProperty('priority');
+  });
+
+  it.each([0, 5, 1.5, '4', null])('rejects malformed provider priority %s', async (priority) => {
+    const transport = new ScriptedTransport([
+      json({ id: 'project-1', name: 'Home', child_order: 1, inbox_project: false }),
+      json({
+        results: [
+          {
+            id: 'task-1',
+            project_id: 'project-1',
+            section_id: null,
+            content: 'Task',
+            child_order: 1,
+            priority
+          }
+        ],
+        next_cursor: null
+      })
+    ]);
+    await expect(createRepository(transport).listTasks('project-1', 'active')).rejects.toThrow(
+      'malformed response'
+    );
+  });
+
   it('lists every paginated active project visible to the connected Todoist tenant', async () => {
     const transport = new ScriptedTransport([
       json({

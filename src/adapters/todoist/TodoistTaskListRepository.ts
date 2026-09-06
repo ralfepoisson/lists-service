@@ -30,6 +30,7 @@ interface TodoistTask {
   readonly section_id: string | null;
   readonly content: string;
   readonly child_order: number;
+  readonly priority?: number;
 }
 
 export class TodoistTaskListRepository implements TaskListRepository {
@@ -246,7 +247,12 @@ export class TodoistTaskListRepository implements TaskListRepository {
       (value['section_id'] !== null && typeof value['section_id'] !== 'string') ||
       typeof value['content'] !== 'string' ||
       typeof value['child_order'] !== 'number' ||
-      !Number.isInteger(value['child_order'])
+      !Number.isInteger(value['child_order']) ||
+      (value['priority'] !== undefined &&
+        (typeof value['priority'] !== 'number' ||
+          !Number.isInteger(value['priority']) ||
+          value['priority'] < 1 ||
+          value['priority'] > 4))
     ) {
       throw this.malformedResponse();
     }
@@ -255,7 +261,8 @@ export class TodoistTaskListRepository implements TaskListRepository {
       project_id: value['project_id'],
       section_id: value['section_id'],
       content: value['content'],
-      child_order: value['child_order']
+      child_order: value['child_order'],
+      ...(value['priority'] === undefined ? {} : { priority: value['priority'] })
     };
   }
 
@@ -263,7 +270,14 @@ export class TodoistTaskListRepository implements TaskListRepository {
     if (task.project_id !== listId) {
       throw new TaskNotFoundError();
     }
-    return new TaskListTask(task.id, listId, task.content, isCompleted, task.child_order);
+    return new TaskListTask(
+      task.id,
+      listId,
+      task.content,
+      isCompleted,
+      task.child_order,
+      task.priority === undefined ? undefined : 5 - task.priority
+    );
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {

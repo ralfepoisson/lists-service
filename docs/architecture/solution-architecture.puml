@@ -1,6 +1,7 @@
 @startuml
 note "Public /version exposes package SemVer and immutable Lambda/container revision." as VersionMetadata
 title lists-service v1 - Implemented solution architecture
+note "TaskListTask priority: provider API 4..1 maps to UI 1..4; absent remains omitted." as TaskPriority
 
 skinparam componentStyle rectangle
 skinparam packageStyle rectangle

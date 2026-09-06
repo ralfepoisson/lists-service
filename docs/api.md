@@ -128,3 +128,12 @@ The implementation can return:
 - `INTERNAL_ERROR`
 
 Provider bodies, tokens, and stack traces are not returned.
+
+## Task priority projection
+
+Task read/create/update responses expose optional integer `priority` from 1
+(highest) through 4 (lowest). The [official Todoist API v1](https://developer.todoist.com/api/v1/)
+uses 1 normal through 4 urgent, so Lists maps each present value to `5 - priority`.
+Missing provider values remain omitted; invalid present values reject as a
+malformed upstream response. This applies to active and completed task mapping.
+Provider create/update payloads remain unchanged; no priority mutation is added.

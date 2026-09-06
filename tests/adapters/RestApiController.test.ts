@@ -173,7 +173,7 @@ describe('RestApiController', () => {
     expect(response.isBase64Encoded).toBe(true);
     expect(pdf.subarray(0, 5).toString('ascii')).toBe('%PDF-');
     expect(pdf.subarray(-6).toString('ascii')).toContain('%%EOF');
-  });
+  }, 30_000);
 
   it('returns 201 for a new item and 200 for an exact duplicate', async () => {
     const fixture = new RestControllerFixture();

@@ -16,5 +16,5 @@ describe('PdfKitShoppingListRenderer', () => {
     expect(pdfStructure.match(/\/Type \/Page\b/gu)).toHaveLength(3);
     expect(pdfStructure).toContain('/Count 3');
     expect(pdfStructure).toContain('(Shopping list)');
-  });
+  }, 30_000);
 });

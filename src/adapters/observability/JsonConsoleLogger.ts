@@ -20,11 +20,28 @@ export class JsonConsoleLogger implements OperationalLogger {
     ) {
       return;
     }
+    const safeRequestId = /^[a-z0-9._:-]{1,128}$/iu.test(event.requestId)
+      ? event.requestId
+      : 'invalid';
+    const safeText = (value: string | undefined, fallback: string): string | undefined =>
+      value === undefined
+        ? undefined
+        : /^[a-z0-9 ./_:-]{1,160}$/iu.test(value)
+          ? value
+          : fallback;
     process.stdout.write(
       `${JSON.stringify({
         timestamp: new Date().toISOString(),
         component: 'lists-service',
-        ...event
+        level: event.level,
+        message: safeText(event.message, 'Operational event.'),
+        requestId: safeRequestId,
+        channel: event.channel,
+        operation: safeText(event.operation, 'unknown'),
+        intentName: safeText(event.intentName, 'unknown'),
+        durationMs: event.durationMs,
+        status: safeText(event.status, 'unknown'),
+        upstreamStatus: event.upstreamStatus
       })}\n`
     );
   }

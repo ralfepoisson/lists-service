@@ -20,6 +20,15 @@ application layer powers:
 - an `en-GB` Alexa custom skill for adding, reading, removing, completing, and
   clearing shopping-list items.
 
+REST and Alexa entry points already emit JSON operational records with request
+id, channel, operation, status, and elapsed milliseconds. They do not log
+authorization headers, Todoist tokens, list content, request bodies, or tenant
+profile data.
+Lambda sends these stdout records to its configured CloudWatch log group; the
+local REST process writes the same JSON format to stdout. Dynamic list/task/item
+identifiers are reduced to route templates. Re-run the focused boundary with
+`npm test -- --run tests/adapters/JsonConsoleLogger.test.ts`.
+
 `POST /api/v1/search` supplies bounded workspace-search results over the acting
 tenant's visible list names and active task content. It requires a verified
 Life2 JWT, ignores caller-supplied tenant identifiers, and returns allowlisted

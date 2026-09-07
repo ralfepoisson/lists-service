@@ -7,6 +7,24 @@ import type {
 import type { RestRequest } from '../adapters/rest/RestApiController.js';
 import { RestApplicationComposition } from '../bootstrap/ApplicationComposition.js';
 
+export function safeRestOperation(method: string, path: string): string {
+  const templates = [
+    [/^\/v1\/items\/[^/]+\/(complete|reopen)$/u, '/v1/items/:itemId/$1'],
+    [/^\/v1\/items\/[^/]+$/u, '/v1/items/:itemId'],
+    [/^\/v1\/task-lists\/[^/]+\/tasks\/order$/u, '/v1/task-lists/:listId/tasks/order'],
+    [/^\/v1\/task-lists\/[^/]+\/tasks\/[^/]+\/complete$/u, '/v1/task-lists/:listId/tasks/:taskId/complete'],
+    [/^\/v1\/task-lists\/[^/]+\/tasks\/[^/]+$/u, '/v1/task-lists/:listId/tasks/:taskId'],
+    [/^\/v1\/task-lists\/[^/]+\/tasks$/u, '/v1/task-lists/:listId/tasks'],
+    [/^\/v1\/task-lists\/[^/]+$/u, '/v1/task-lists/:listId']
+  ] as const;
+  const template = templates.reduce(
+    (current, [pattern, replacement]) =>
+      current === path && pattern.test(path) ? path.replace(pattern, replacement) : current,
+    path
+  );
+  return `${method} ${template}`;
+}
+
 export class RestLambdaEntrypoint {
   private readonly composition = RestApplicationComposition.create();
 
@@ -19,11 +37,11 @@ export class RestLambdaEntrypoint {
     const request = this.mapRequest(event, context);
     const response = await application.restController.handle(request);
     application.logger.log({
-      level: response.statusCode >= 500 ? 'error' : 'info',
+      level: response.statusCode >= 500 ? 'error' : response.statusCode >= 400 ? 'warn' : 'info',
       message: 'REST request completed.',
       requestId: request.requestId,
       channel: 'rest',
-      operation: `${request.method} ${request.path}`,
+      operation: safeRestOperation(request.method, request.path),
       durationMs: Math.round(performance.now() - startedAt),
       status: String(response.statusCode)
     });

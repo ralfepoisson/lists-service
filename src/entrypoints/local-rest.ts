@@ -1,8 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 
+import { JsonConsoleLogger } from '../adapters/observability/JsonConsoleLogger.js';
 import type { RestRequest } from '../adapters/rest/RestApiController.js';
 import { LocalRestApplicationComposition } from '../bootstrap/LocalApplicationComposition.js';
+import { localRestCompletionEvent } from './LocalRestLogging.js';
 
 class LocalRestServer {
   private readonly application = LocalRestApplicationComposition.create();
@@ -15,16 +18,29 @@ class LocalRestServer {
     await new Promise<void>((resolve) => {
       server.listen(port, host, resolve);
     });
-    process.stdout.write(`Lists Service REST API listening on ${host}:${port}\n`);
+    const application = await this.application;
+    application.logger.log({
+      level: 'info',
+      message: 'Local REST API started.',
+      requestId: 'startup',
+      channel: 'system',
+      operation: 'server.start',
+      status: 'ready'
+    });
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const startedAt = performance.now();
+    const requestId = randomUUID();
+    const method = request.method ?? 'GET';
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    let logger = new JsonConsoleLogger('info');
     try {
       const application = await this.application;
-      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      logger = application.logger;
       const body = await this.readBody(request);
       const restRequest: RestRequest = {
-        method: request.method ?? 'GET',
+        method,
         path: url.pathname,
         headers: Object.fromEntries(
           Object.entries(request.headers).map(([name, value]) => [
@@ -33,16 +49,40 @@ class LocalRestServer {
           ])
         ),
         query: Object.fromEntries(url.searchParams.entries()),
-        requestId: randomUUID(),
+        requestId,
         ...(body.length === 0 ? {} : { body })
       };
       const restResponse = await application.restController.handle(restRequest);
-      response.writeHead(restResponse.statusCode, restResponse.headers);
+      logger.log(
+        localRestCompletionEvent({
+          method,
+          path: url.pathname,
+          requestId,
+          statusCode: restResponse.statusCode,
+          durationMs: performance.now() - startedAt
+        })
+      );
+      response.writeHead(restResponse.statusCode, {
+        ...restResponse.headers,
+        'x-request-id': requestId
+      });
       response.end(
         restResponse.isBase64Encoded ? Buffer.from(restResponse.body, 'base64') : restResponse.body
       );
     } catch {
-      response.writeHead(500, { 'content-type': 'application/json' });
+      logger.log(
+        localRestCompletionEvent({
+          method,
+          path: url.pathname,
+          requestId,
+          statusCode: 500,
+          durationMs: performance.now() - startedAt
+        })
+      );
+      response.writeHead(500, {
+        'content-type': 'application/json',
+        'x-request-id': requestId
+      });
       response.end(JSON.stringify({ error: { code: 'LOCAL_SERVER_ERROR' } }));
     }
   }

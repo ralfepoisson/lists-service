@@ -45,7 +45,7 @@ cloud "AWS" {
   }
 
   package "Shared application package" as Application {
-    component "Shopping-list + task-list\nuse-case objects\n+ bounded workspace search" as UseCases
+    component "Shopping-list (add, edit, complete, delete)\n+ task-list use-case objects\n+ bounded workspace search" as UseCases
     component "ShoppingListPrintService\ntransient active-list snapshot" as PrintUseCase
     interface "ShoppingListRepository +\nTaskListRepository" as RepositoryPort
     interface "ShoppingListPdfRenderer" as PdfPort

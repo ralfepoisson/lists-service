@@ -33,6 +33,20 @@ export class ShoppingListService {
     return { item: await this.repository.add(content), alreadyExists: false };
   }
 
+  async updateById(itemId: string, rawContent: string): Promise<ShoppingListItem> {
+    this.validateItemId(itemId);
+    const currentItem = (await this.repository.list('active')).find((item) => item.id === itemId);
+    if (currentItem === undefined) throw new ItemNotFoundError();
+    const content = this.contentPolicy.validate(rawContent);
+    if (
+      this.contentPolicy.normaliseForComparison(currentItem.content) ===
+      this.contentPolicy.normaliseForComparison(content)
+    ) {
+      return currentItem;
+    }
+    return this.repository.update(itemId, content);
+  }
+
   async deleteById(itemId: string): Promise<void> {
     this.validateItemId(itemId);
     await this.repository.delete(itemId);

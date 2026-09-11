@@ -16,7 +16,7 @@ deployment are explicit tenant-bound service principals; neither can select an
 account at request time. The same object-oriented
 application layer powers:
 
-- an authenticated REST API for the Life2 webapp and personal automations; and
+- an authenticated REST API for the Life2 webapp, mobile app, and personal automations; and
 - an `en-GB` Alexa custom skill for adding, reading, removing, completing, and
   clearing shopping-list items.
 

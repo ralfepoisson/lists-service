@@ -12,7 +12,10 @@ export function safeRestOperation(method: string, path: string): string {
     [/^\/v1\/items\/[^/]+\/(complete|reopen)$/u, '/v1/items/:itemId/$1'],
     [/^\/v1\/items\/[^/]+$/u, '/v1/items/:itemId'],
     [/^\/v1\/task-lists\/[^/]+\/tasks\/order$/u, '/v1/task-lists/:listId/tasks/order'],
-    [/^\/v1\/task-lists\/[^/]+\/tasks\/[^/]+\/complete$/u, '/v1/task-lists/:listId/tasks/:taskId/complete'],
+    [
+      /^\/v1\/task-lists\/[^/]+\/tasks\/[^/]+\/complete$/u,
+      '/v1/task-lists/:listId/tasks/:taskId/complete'
+    ],
     [/^\/v1\/task-lists\/[^/]+\/tasks\/[^/]+$/u, '/v1/task-lists/:listId/tasks/:taskId'],
     [/^\/v1\/task-lists\/[^/]+\/tasks$/u, '/v1/task-lists/:listId/tasks'],
     [/^\/v1\/task-lists\/[^/]+$/u, '/v1/task-lists/:listId']

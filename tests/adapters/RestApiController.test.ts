@@ -251,6 +251,26 @@ describe('RestApiController', () => {
     expect(fixture.repository.deletedIds).toEqual(['1']);
   });
 
+  it('updates an active shopping item through the verified tenant service', async () => {
+    const fixture = new RestControllerFixture();
+
+    const response = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/items/1',
+        method: 'PATCH',
+        headers: { authorization: 'Bearer life2-tenant' },
+        body: JSON.stringify({ content: 'oat milk' })
+      })
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      data: expect.objectContaining({ id: '1', content: 'oat milk', isCompleted: false }),
+      meta: { requestId: 'request-1' }
+    });
+    expect(fixture.requestedTenantIds).toEqual(['account-123']);
+  });
+
   it('creates and lists named task lists', async () => {
     const fixture = new RestControllerFixture();
     const headers = { authorization: 'Bearer life2-tenant' };

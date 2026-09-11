@@ -102,6 +102,8 @@ end note
 note bottom of Item
   GET /v1/items.pdf reads active tasks and renders a transient
   tenant Shopping snapshot. No PDF or list entity is persisted.
+  PATCH /v1/items/:itemId changes content only after the item is
+  resolved from the configured Shopping project.
 end note
 
 note bottom of SearchHit

@@ -4,6 +4,60 @@ This is the durable, newest-first engineering record for `lists-service`.
 Prepend new entries immediately below this introduction. Do not include secrets,
 credentials, full Alexa payloads, or sensitive shopping-item content.
 
+## 2026-09-11 11:27 CEST — Correction: Lists Service release-gate baseline
+
+- **Status:** local validation partially restored; lint diagnosis pending.
+- **Scope:** Corrected the local REST logger variable to its `OperationalLogger`
+  interface so the existing composition logger can be assigned without changing
+  runtime behavior. Formatted the two pre-existing files reported by Prettier.
+- **Evidence:** `npm run typecheck`, `npm run format:check`, `npm test` (23
+  files/140 tests), `npm run build`, and both PlantUML checks completed with
+  exit code 0. `npm run lint` produced no result after 90 seconds on two runs
+  and was interrupted; it remains a release blocker rather than a passing check.
+- **Next actions:** Diagnose the ESLint non-completion, independently rerun the
+  recorded evidence, and only then consider the separately authorized candidate
+  deployment.
+
+## 2026-09-11 11:20 CEST — Tenant-scoped Shopping item editing for mobile
+
+- **Status:** implemented, validation and deployment pending.
+- **Scope:** Added `PATCH /v1/items/{itemId}` to edit the content of an active
+  Shopping item for the authenticated tenant. The mobile client consumes this
+  route alongside the existing list, add, complete, and delete operations.
+- **Requirements:** `LST-FUN-012`, `LST-SCP-001`, `LST-SCP-002`, `LST-ARC-002`,
+  `LST-SEC-001`.
+- **Design/decisions:** `ShoppingListService` resolves the item from the active
+  configured Shopping project before delegating to the repository, so an ID for
+  another Todoist project cannot be edited. The Todoist adapter uses its
+  documented in-place task update request; no delete-and-recreate workaround or
+  application database was introduced.
+- **Files:** Shopping repository port and Todoist adapter, application service,
+  REST controller/tests, OpenAPI/API/requirements/architecture docs and both
+  diagrams.
+- **TDD evidence:**
+  - Red: `npm test -- --run tests/application/ShoppingListService.test.ts tests/adapters/TodoistShoppingListRepository.test.ts tests/adapters/RestApiController.test.ts`
+    produced 3 failures (`updateById` and repository `update` missing; route
+    returned 404) and 40 passing tests.
+  - Green: the same command produced 3 passing files and 43 passing tests.
+  - Regression: `npm test` produced 23 passing files and 140 passing tests.
+- **Other validation:** Both PlantUML checks and `git diff --check` passed.
+  `npm run typecheck` remains blocked by pre-existing
+  `src/entrypoints/local-rest.ts(40,7)` incompatibility between
+  `OperationalLogger` and `JsonConsoleLogger`. `npm run format:check` reports
+  only that file plus existing `JsonConsoleLogger.ts`; the changed Shopping
+  service was formatted. `npm run lint && npm run build` did not emit a result
+  within 90 seconds and was interrupted; it requires a separate environment
+  diagnosis before publication.
+- **Real-boundary evidence:** The production Lists endpoint was read through a
+  signed-in iOS Simulator, but no Todoist mutation or production deployment was
+  performed. Existing production behavior does not prove the new PATCH route.
+- **Documentation:** README, API guide, OpenAPI, requirements, architecture
+  narrative, and both PlantUML diagrams updated.
+- **Deviations/risks:** None in the endpoint contract. Deployment needs an
+  explicitly authorized candidate/accept/activation sequence.
+- **Next actions:** Restore the broader local quality gate, independently rerun
+  evidence, then publish and accept a candidate only with owner authorization.
+
 ## 2026-09-05 — Normalized Task Lists priority
 
 - **Status:** implemented; full maintained validation passed; deployed acceptance pending.

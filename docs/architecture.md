@@ -79,6 +79,8 @@ Use-case objects coordinate behavior through narrow ports:
 
 - list items;
 - add item with duplicate policy;
+- edit the content of an active item after confirming it belongs to the
+  configured Shopping project;
 - remove item;
 - complete item;
 - reopen item where the current provider contract supports it;

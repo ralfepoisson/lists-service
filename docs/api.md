@@ -15,6 +15,9 @@ verified on 2026-07-31.
   PDF attachment named `shopping-list.pdf`; the generated document is not stored.
 - `POST /v1/items` returns `201` for a created task and `200` with
   `meta.alreadyExists=true` for an exact normalized active duplicate.
+- `PATCH /v1/items/{itemId}` updates the content of one active task in the
+  configured Shopping project. The item ID is first resolved from that active
+  list, so a caller cannot use this route to edit another Todoist project.
 - `DELETE /v1/items/{itemId}` permanently deletes one task.
 - `POST /v1/items/{itemId}/complete` closes one task.
 - `POST /v1/items/{itemId}/reopen` reopens one completed task.

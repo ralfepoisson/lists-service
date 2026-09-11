@@ -178,6 +178,10 @@ export class RestApiController {
         await shoppingList.deleteById(itemId);
         return this.success(200, { deleted: true }, request.requestId);
       }
+      if (request.method === 'PATCH' && action === undefined) {
+        const item = await shoppingList.updateById(itemId, this.parseAddBody(request.body));
+        return this.success(200, item, request.requestId);
+      }
       if (request.method === 'POST' && action === 'complete') {
         await shoppingList.completeById(itemId);
         return this.success(200, { completed: true }, request.requestId);

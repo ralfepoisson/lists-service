@@ -24,6 +24,22 @@ export class InMemoryShoppingListRepository implements ShoppingListRepository {
     return item;
   }
 
+  async update(itemId: string, content: string): Promise<ShoppingListItem> {
+    const index = this.items.findIndex((item) => item.id === itemId);
+    if (index < 0) throw new Error('Shopping list item not found.');
+    const current = this.items[index] as ShoppingListItem;
+    const updated = new ShoppingListItem(
+      current.id,
+      content,
+      current.isCompleted,
+      current.description,
+      current.createdAt,
+      current.completedAt
+    );
+    this.items[index] = updated;
+    return updated;
+  }
+
   async delete(itemId: string): Promise<void> {
     this.deletedIds.push(itemId);
     const index = this.items.findIndex((item) => item.id === itemId);

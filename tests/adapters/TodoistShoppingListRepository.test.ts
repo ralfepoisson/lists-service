@@ -132,6 +132,30 @@ describe('TodoistShoppingListRepository', () => {
     );
   });
 
+  it('updates shopping-item content through Todoist without changing its project', async () => {
+    const transport = new ScriptedHttpTransport([
+      jsonResponse({
+        id: '4',
+        project_id: 'shopping',
+        content: 'oat milk',
+        description: '',
+        added_at: '2026-07-31T12:00:00Z'
+      })
+    ]);
+    const repository = createRepository(transport);
+
+    await expect(repository.update('4', 'oat milk')).resolves.toEqual(
+      expect.objectContaining({ id: '4', content: 'oat milk', isCompleted: false })
+    );
+    expect(transport.requests[0]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        url: 'https://api.todoist.com/api/v1/tasks/4',
+        body: JSON.stringify({ content: 'oat milk' })
+      })
+    );
+  });
+
   it.each([
     ['complete', 'POST', '/tasks/42/close'],
     ['reopen', 'POST', '/tasks/42/reopen'],

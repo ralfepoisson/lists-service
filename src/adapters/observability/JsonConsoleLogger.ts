@@ -24,11 +24,7 @@ export class JsonConsoleLogger implements OperationalLogger {
       ? event.requestId
       : 'invalid';
     const safeText = (value: string | undefined, fallback: string): string | undefined =>
-      value === undefined
-        ? undefined
-        : /^[a-z0-9 ./_:-]{1,160}$/iu.test(value)
-          ? value
-          : fallback;
+      value === undefined ? undefined : /^[a-z0-9 ./_:-]{1,160}$/iu.test(value) ? value : fallback;
     process.stdout.write(
       `${JSON.stringify({
         timestamp: new Date().toISOString(),

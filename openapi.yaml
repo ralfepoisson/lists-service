@@ -449,6 +449,35 @@ paths:
   /v1/items/{itemId}:
     parameters:
       - $ref: '#/components/parameters/ItemId'
+    patch:
+      operationId: updateItem
+      summary: Update an active shopping-list item's content
+      tags: [Items]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddItemRequest'
+      responses:
+        '200':
+          description: The active item was updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateItemResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+        '503':
+          $ref: '#/components/responses/UpstreamError'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       operationId: deleteItem
       summary: Permanently delete an item
@@ -788,6 +817,15 @@ components:
               type: string
             alreadyExists:
               type: boolean
+    UpdateItemResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/ShoppingListItem'
+        meta:
+          $ref: '#/components/schemas/Meta'
     ClearCompletedResponse:
       $ref: '#/components/schemas/MutationCountResponse'
     MutationCountResponse:

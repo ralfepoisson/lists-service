@@ -4,6 +4,7 @@ import { performance } from 'node:perf_hooks';
 
 import { JsonConsoleLogger } from '../adapters/observability/JsonConsoleLogger.js';
 import type { RestRequest } from '../adapters/rest/RestApiController.js';
+import type { OperationalLogger } from '../application/ports/OperationalLogger.js';
 import { LocalRestApplicationComposition } from '../bootstrap/LocalApplicationComposition.js';
 import { localRestCompletionEvent } from './LocalRestLogging.js';
 
@@ -34,7 +35,7 @@ class LocalRestServer {
     const requestId = randomUUID();
     const method = request.method ?? 'GET';
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    let logger = new JsonConsoleLogger('info');
+    let logger: OperationalLogger = new JsonConsoleLogger('info');
     try {
       const application = await this.application;
       logger = application.logger;

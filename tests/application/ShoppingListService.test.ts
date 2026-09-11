@@ -33,6 +33,21 @@ describe('ShoppingListService', () => {
     await expect(repository.list('active')).resolves.toHaveLength(2);
   });
 
+  it('updates content only for an active item in the configured shopping list', async () => {
+    const repository = new InMemoryShoppingListRepository([
+      new ShoppingListItem('1', 'milk', false),
+      new ShoppingListItem('2', 'bread', true)
+    ]);
+    const service = new ShoppingListService(repository);
+
+    await expect(service.updateById('1', ' oat milk ')).resolves.toEqual(
+      expect.objectContaining({ id: '1', content: 'oat milk', isCompleted: false })
+    );
+    await expect(service.updateById('2', 'sourdough')).rejects.toMatchObject({
+      code: 'ITEM_NOT_FOUND'
+    });
+  });
+
   it('completes a uniquely matched active item by spoken text', async () => {
     const repository = new InMemoryShoppingListRepository([
       new ShoppingListItem('1', 'dishwasher tablets', false)

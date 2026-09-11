@@ -55,6 +55,11 @@ export class TodoistShoppingListRepository implements ShoppingListRepository {
     return this.mapTask(this.parseTask(payload), false);
   }
 
+  async update(itemId: string, content: string): Promise<ShoppingListItem> {
+    const payload = await this.client.post(`/tasks/${encodeURIComponent(itemId)}`, { content });
+    return this.mapTask(this.parseTask(payload), false);
+  }
+
   async delete(itemId: string): Promise<void> {
     await this.client.delete(`/tasks/${encodeURIComponent(itemId)}`);
   }

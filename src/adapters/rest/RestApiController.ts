@@ -37,6 +37,9 @@ export class RestApiController {
       if (request.method === 'GET' && request.path === '/health') {
         return this.success(200, { status: 'ok' }, request.requestId);
       }
+      if (request.method === 'GET' && request.path === '/health/heartbeat') {
+        return this.success(200, { status: 'healthy', component: 'lists-service' }, request.requestId);
+      }
       if (request.method === 'GET' && request.path === '/version') {
         return this.response(200, {
           schemaVersion: 1,

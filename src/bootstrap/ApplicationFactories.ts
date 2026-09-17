@@ -104,7 +104,17 @@ export class RestControllerFactory {
         new RestBearerAuthenticator(restToken, security.life2AllowedAccountId),
         new Life2JwtRestAuthenticator(life2SigningKey)
       ]),
-      tenantServices
+      tenantServices,
+      async () => {
+        try {
+          const { shoppingList } = await tenantServices.shoppingForTenant(
+            security.life2AllowedAccountId
+          );
+          return await shoppingList.isReady();
+        } catch {
+          return false;
+        }
+      }
     );
   }
 }

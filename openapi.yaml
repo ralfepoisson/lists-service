@@ -23,7 +23,7 @@ servers:
         default: eu-west-1
 tags:
   - name: Health
-    description: Liveness and authenticated dependency-readiness operations.
+    description: Public safe liveness/heartbeat and authenticated dependency-readiness operations.
   - name: Items
     description: Shopping-list query and mutation operations.
   - name: Task Lists
@@ -94,6 +94,25 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /health/heartbeat:
+    get:
+      operationId: getHeartbeat
+      summary: Check the deployment-bound Todoist Shopping dependency
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: The deployment-bound Todoist Shopping project accepted a bounded read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeartbeatResponse'
+        '503':
+          description: The configured Todoist dependency is unavailable or unhealthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeartbeatResponse'
   /health/ready:
     get:
       operationId: getReadiness
@@ -765,6 +784,20 @@ components:
             status:
               type: string
               const: ok
+        meta:
+          $ref: '#/components/schemas/Meta'
+    HeartbeatResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [status, component]
+          properties:
+            status: { type: string, enum: [healthy, unhealthy] }
+            component: { type: string, const: lists-service }
         meta:
           $ref: '#/components/schemas/Meta'
     ReadinessResponse:

@@ -51,6 +51,7 @@ describe('production release assets', () => {
     expect(main).toContain('resource "aws_route53_record" "rest_ipv6"');
     expect(main).toContain('aws_lambda_alias.rest_active');
     expect(main).toContain('var.rest_domain_name');
+    expect(main).toContain('"GET /health/heartbeat"');
     expect(main).toContain('"GET /v1/items.pdf"');
   });
 
@@ -79,6 +80,7 @@ describe('production release assets', () => {
     expect(deploy).toContain('--rollback-rest');
     expect(deploy).toContain('use_lockfile=true');
     expect(accept).toContain('invalid bearer rejection');
+    expect(accept).toContain('/health/heartbeat');
     expect(accept).toContain('/health/ready');
     expect(accept).toContain('/v1/items');
     expect(secrets).toContain('file://');

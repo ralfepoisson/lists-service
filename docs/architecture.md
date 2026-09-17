@@ -178,8 +178,12 @@ read-only; source files remain ignored and never enter images or logs.
 
 ### Authentication and secrets
 
-`GET /health` is public and proves only that the Lambda responds. Other REST
-routes, including readiness, require bearer-token validation. Authentication
+`GET /health` is public and proves only that the Lambda responds.
+`GET /health/heartbeat` is also public, but resolves only the deployment-bound
+Shopping account from runtime configuration and performs one bounded Todoist
+read. It returns safe health state only; it does not reveal an account,
+project, token, or provider error. Other REST routes, including readiness,
+require bearer-token validation. Authentication
 returns either a deployment-bound automation principal with configured
 `accountId` or a Life2 principal containing verified `accountId`, `sub`, and
 `email`. Both resolve Shopping through the catalogue; only the Life2 principal

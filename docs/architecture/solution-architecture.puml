@@ -148,6 +148,9 @@ note top of RestAlias
   https://lists.life-sqrd.com
   Published candidate -> acceptance -> active alias.
   Rollback selects a retained accepted version.
+  Public /health/heartbeat performs one bounded Todoist
+  read through the deployment-bound Shopping account and
+  returns safe healthy/unhealthy state only.
 end note
 
 note right of UseCases

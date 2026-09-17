@@ -44,10 +44,11 @@ invoke_get() {
 }
 
 [ "$(invoke_get /health '')" = "200" ] || { echo "public health failed" >&2; exit 1; }
+[ "$(invoke_get /health/heartbeat '')" = "200" ] || { echo "public heartbeat failed" >&2; exit 1; }
 [ "$(invoke_get /health/ready invalid-production-acceptance-token)" = "401" ] || { echo "invalid bearer rejection failed" >&2; exit 1; }
 rest_token=$(tr -d '\r\n' <"$rest_token_file")
 [ "$(invoke_get /health/ready "$rest_token")" = "200" ] || { echo "authenticated readiness failed" >&2; exit 1; }
 [ "$(invoke_get /v1/items "$rest_token")" = "200" ] || { echo "authenticated persisted list read failed" >&2; exit 1; }
 item_count=$(jq -er '.body | fromjson | .meta.count' "$response_file")
 unset rest_token
-echo "candidate $candidate_version accepted: health=200 invalid-auth=401 readiness=200 persisted-list-read=200 item-count=$item_count"
+echo "candidate $candidate_version accepted: health=200 heartbeat=200 invalid-auth=401 readiness=200 persisted-list-read=200 item-count=$item_count"

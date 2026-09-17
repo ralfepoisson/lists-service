@@ -223,6 +223,7 @@ resource "aws_apigatewayv2_integration" "rest" {
 locals {
   rest_routes = toset([
     "GET /health",
+    "GET /health/heartbeat",
     "GET /health/ready",
     "GET /version",
     "GET /v1/items",

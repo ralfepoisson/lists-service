@@ -7,6 +7,9 @@ verified on 2026-07-31.
 ## REST behavior
 
 - `GET /health` proves only Lambda/process liveness and is public.
+- `GET /health/heartbeat` is public and performs one bounded Todoist task read
+  for the deployment-bound Shopping account. It returns only `healthy` or
+  `unhealthy` and never exposes the account, project, provider error, or token.
 - `GET /health/ready` calls Todoist for the configured project and requires the
   REST bearer token or a verified Life2 JWT and resolves Shopping for that
   principal's account.
@@ -51,7 +54,8 @@ Shopping through either the verified JWT account or the automation token's
 deployment-bound account; neither request surface accepts a caller-selected
 tenant identifier.
 
-All protected routes require `Authorization: Bearer <token>`. JWT verification
+All routes other than `/health`, `/health/heartbeat`, and `/version` require
+`Authorization: Bearer <token>`. JWT verification
 pins `HS256`, issuer `life2.ralfe.me`, audience `account`, expiry/time claims,
 and non-empty `accountId`, `sub`, and `email`. For Task Lists, `accountId`
 selects one catalogue entry containing a token-secret reference; the referenced

@@ -26,10 +26,13 @@ export interface RestResponse {
   readonly isBase64Encoded?: boolean;
 }
 
+export type HeartbeatCheck = () => Promise<boolean>;
+
 export class RestApiController {
   constructor(
     private readonly authenticator: RestAuthenticator,
-    private readonly taskListServices: TenantTaskListServiceProvider
+    private readonly taskListServices: TenantTaskListServiceProvider,
+    private readonly heartbeatCheck: HeartbeatCheck
   ) {}
 
   async handle(request: RestRequest): Promise<RestResponse> {
@@ -38,7 +41,12 @@ export class RestApiController {
         return this.success(200, { status: 'ok' }, request.requestId);
       }
       if (request.method === 'GET' && request.path === '/health/heartbeat') {
-        return this.success(200, { status: 'healthy', component: 'lists-service' }, request.requestId);
+        const healthy = await this.heartbeatCheck();
+        return this.success(
+          healthy ? 200 : 503,
+          { status: healthy ? 'healthy' : 'unhealthy', component: 'lists-service' },
+          request.requestId
+        );
       }
       if (request.method === 'GET' && request.path === '/version') {
         return this.response(200, {

@@ -281,9 +281,11 @@ Then, from a clean local `main`, publish without changing the active alias:
 
 The script runs the complete quality gate under exact Node 24.18.0/npm 11.16.0
 in the digest-pinned build container. Invoke the reported candidate version
-directly with an API Gateway v2 event: require public `/health` 200,
-authenticated `/health/ready` 200, authenticated persisted Todoist reads, and
-401 for an invalid bearer. Do not use a provider mutation as readiness proof.
+directly with an API Gateway v2 event: require public `/health` and
+`/health/heartbeat` 200, authenticated `/health/ready` 200, authenticated
+persisted Todoist reads, and 401 for an invalid bearer. The heartbeat performs
+one bounded read through the deployment-bound Shopping account and returns only
+safe state. Do not use a provider mutation as readiness proof.
 The maintained acceptance command performs those checks without printing the
 token or item contents:
 
@@ -298,8 +300,9 @@ updates the canonical DNS/custom-domain route:
 ./scripts/deploy-production.sh /absolute/mode-0600/production.env --activate-rest VERSION
 ```
 
-Verify `https://lists.life-sqrd.com/health`, authenticated readiness/list reads,
-TLS, and the alias target. Roll back by selecting a previously accepted,
+Verify `https://lists.life-sqrd.com/health`,
+`https://lists.life-sqrd.com/health/heartbeat`, authenticated readiness/list
+reads, TLS, and the alias target. Roll back by selecting a previously accepted,
 still-published version and rerunning the same gates:
 
 ```bash
@@ -342,7 +345,9 @@ Alexa, ask Household List to clear completed items
 
 ## REST API
 
-`GET /health` is public. Protected Shopping routes resolve their Todoist
+`GET /health` is public liveness. `GET /health/heartbeat` is also public, but
+performs one bounded Todoist task read using only the deployment-bound Shopping
+account and returns safe `healthy` or `unhealthy` state. Protected Shopping routes resolve their Todoist
 connection from the authenticated principal's verified or deployment-bound
 `accountId`. The strong automation token is a deployment-bound service
 principal and cannot choose a tenant. Task Lists and Todoist connection routes
@@ -358,6 +363,8 @@ shell environment:
 
 ```bash
 curl "$LISTS_URL/health"
+
+curl "$LISTS_URL/health/heartbeat"
 
 curl "$LISTS_URL/health/ready" \
   -H "Authorization: Bearer $LISTS_TOKEN"
@@ -414,7 +421,9 @@ status codes are in [the API guide](docs/api.md).
 - `GET /v1/todoist/connection` reveals only `connected` or `not_connected` and
   `canManageConnection: false`. Authorization-start and disconnect requests are
   intentionally rejected because this release has no browser credential flow.
-- `/health` reveals only process liveness; readiness is authenticated.
+- `/health` reveals only process liveness. `/health/heartbeat` reveals only
+  safe state after a bounded deployment-bound Todoist read; readiness remains
+  authenticated.
 - Workspace search is read-only, capped at 30 hits, and sends
   `Cache-Control: private, no-store` because task text can be sensitive.
 - Alexa skill ID is restricted in Lambda IAM permission and checked by ASK SDK.

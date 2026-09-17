@@ -91,6 +91,9 @@ note right of Configuration
   application-domain data.
   Published Lambda versions and aliases provide
   release rollback; Todoist data is not copied.
+  The public heartbeat selects only the deployment-bound
+  Shopping account and performs a bounded provider read;
+  it never exposes this identifier or provider details.
 end note
 
 note bottom of Connection

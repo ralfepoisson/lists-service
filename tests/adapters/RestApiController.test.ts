@@ -54,35 +54,43 @@ class RestControllerFixture {
   readonly taskListRepository = new InMemoryTaskListRepository();
   readonly taskListService = new TaskListService(this.taskListRepository);
   readonly requestedTenantIds: string[] = [];
-  readonly controller = new RestApiController(new FixtureAuthenticator(), {
-    connectionStatus: async (accountId): Promise<TodoistConnectionStatus> => ({
-      status: ['account-123', 'account-456'].includes(accountId) ? 'connected' : 'not_connected',
-      canManageConnection: false
-    }),
-    forTenant: async (accountId): Promise<TaskListService> => {
-      this.requestedTenantIds.push(accountId);
-      return this.taskListService;
-    },
-    shoppingForTenant: async (
-      accountId
-    ): Promise<{
-      readonly shoppingList: ShoppingListService;
-      readonly printService: ShoppingListPrintService;
-    }> => {
-      this.requestedTenantIds.push(accountId);
-      const shoppingList = new ShoppingListService(
-        accountId === 'account-456' ? this.otherRepository : this.repository
-      );
-      return {
-        shoppingList,
-        printService: new ShoppingListPrintService(
+  heartbeatHealthy = true;
+  readonly controller = new RestApiController(
+    new FixtureAuthenticator(),
+    {
+      connectionStatus: async (accountId): Promise<TodoistConnectionStatus> => ({
+        status: ['account-123', 'account-456'].includes(accountId) ? 'connected' : 'not_connected',
+        canManageConnection: false
+      }),
+      forTenant: async (accountId): Promise<TaskListService> => {
+        this.requestedTenantIds.push(accountId);
+        return this.taskListService;
+      },
+      shoppingForTenant: async (
+        accountId
+      ): Promise<{
+        readonly shoppingList: ShoppingListService;
+        readonly printService: ShoppingListPrintService;
+      }> => {
+        this.requestedTenantIds.push(accountId);
+        const shoppingList = new ShoppingListService(
+          accountId === 'account-456' ? this.otherRepository : this.repository
+        );
+        return {
           shoppingList,
-          new PdfKitShoppingListRenderer(),
-          () => new Date('2026-08-17T08:30:00.000Z')
-        )
-      };
+          printService: new ShoppingListPrintService(
+            shoppingList,
+            new PdfKitShoppingListRenderer(),
+            () => new Date('2026-08-17T08:30:00.000Z')
+          )
+        };
+      }
+    },
+    async () => {
+      this.requestedTenantIds.push('account-123');
+      return this.heartbeatHealthy && (await new ShoppingListService(this.repository).isReady());
     }
-  });
+  );
 
   request(overrides: Partial<RestRequest>): RestRequest {
     return {
@@ -104,6 +112,36 @@ describe('RestApiController', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('"status":"ok"');
+  });
+
+  it('checks the deployment-bound Todoist Shopping project for the public heartbeat', async () => {
+    const fixture = new RestControllerFixture();
+
+    const response = await fixture.controller.handle(
+      fixture.request({ path: '/health/heartbeat' })
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      data: { status: 'healthy', component: 'lists-service' },
+      meta: { requestId: 'request-1' }
+    });
+    expect(fixture.requestedTenantIds).toEqual(['account-123']);
+  });
+
+  it('reports an unavailable Todoist dependency as an unhealthy public heartbeat', async () => {
+    const fixture = new RestControllerFixture();
+    fixture.heartbeatHealthy = false;
+
+    const response = await fixture.controller.handle(
+      fixture.request({ path: '/health/heartbeat' })
+    );
+
+    expect(response.statusCode).toBe(503);
+    expect(JSON.parse(response.body)).toEqual({
+      data: { status: 'unhealthy', component: 'lists-service' },
+      meta: { requestId: 'request-1' }
+    });
   });
 
   it('publishes the component semantic version and release revision without authentication', async () => {

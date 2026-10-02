@@ -30,6 +30,9 @@ host mutation and is not part of source verification. Uploaded release data is
 only a mode-0600 JSON manifest in an uploader-owned mode-0700 staging directory.
 The installed helper takes a no-follow snapshot, validates exact fields and
 identity, and never executes uploaded code.
+Run `bash deploy/ec2/install-host-tools.sh --check-source` before staging;
+it compiles only the Python helpers and syntax-checks both shell scripts without
+requiring root or changing the host.
 
 ## Protected inputs and identities
 

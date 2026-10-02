@@ -1,5 +1,6 @@
 import importlib.util
 import pathlib
+import subprocess
 import sys
 import unittest
 from unittest.mock import patch
@@ -15,6 +16,16 @@ SPEC.loader.exec_module(host_candidate)
 
 
 class CandidatePackageTest(unittest.TestCase):
+    def test_host_installer_syntax_gate_accepts_shell_launcher(self):
+        check = subprocess.run(
+            ["bash", str(ROOT / "deploy" / "ec2" / "install-host-tools.sh"), "--check-source"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(check.returncode, 0, check.stderr)
+        self.assertIn("host_tool_source=valid", check.stdout)
+
     def test_secret_access_preflight_checks_all_runtime_arns_without_returning_values(self):
         arns = {
             "REST_API_TOKEN_SECRET_ARN": "arn:aws:secretsmanager:eu-west-1:154596858576:secret:rest",

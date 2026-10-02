@@ -101,7 +101,7 @@ describe('LoopService', () => {
 
   it('rejects duplicate, malformed, and excessive related references', async () => {
     const service = new LoopService(new InMemoryLoopRepository());
-    const create = (relatedRecords: unknown[]) =>
+    const create = (relatedRecords: unknown[]): Promise<Loop> =>
       service.create('tenant-a', 'user-a', {
         title: 'Follow up',
         outcome: 'Done',

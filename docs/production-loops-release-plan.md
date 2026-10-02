@@ -1,0 +1,89 @@
+# Production Loops release plan (review required)
+
+This plan describes the missing production boundary for the 0.9.0 Lists
+checkout. It changes neither infrastructure nor the active 0.8.0 REST alias.
+The current `lists.life-sqrd.com` route is Route 53 → API Gateway HTTP API →
+REST Lambda `active` alias. The REST Lambda has no VPC attachment and no
+`DATABASE_URL`; `AppConfig.fromRestEnvironment` now requires that value before
+the controller starts. Terraform also omits the five Loop API Gateway routes.
+The repository has no production Lists database, migration runner, or protected
+database credential delivery path.
+
+## Option A: keep Lambda and API Gateway
+
+1. Provision a dedicated, backed-up Lists PostgreSQL database and role on a
+   reviewed private endpoint. The existing production PostgreSQL host, if
+   selected, currently exposes its database only to its local Docker network
+   and loopback; a private VPC route, listener, TLS and narrowly scoped security
+   group would need explicit design. An RDS database would be new paid
+   infrastructure.
+2. Attach only the REST Lambda to private subnets. Supply the database endpoint
+   and credential at runtime from a protected secret, without a plaintext
+   Terraform variable, Lambda environment value, state value, or log line.
+   Give the Lambda role permission only for that secret and its own existing
+   secrets. Keep Alexa independent of the database.
+3. Establish Lambda egress to Todoist and AWS Secrets Manager from those
+   subnets. A NAT path or reviewed private AWS endpoints plus outbound Todoist
+   path is required. VPC attachment without that egress would break existing
+   Shopping and Task Lists.
+4. Run `001_loops.sql` with a separate migrator identity and captured backup
+   and checksum evidence before publishing the candidate. Add the exact Loop
+   API Gateway routes: `GET/POST /v1/loops`, `GET/PATCH /v1/loops/{loopId}`,
+   `POST /v1/loops/{loopId}/close`.
+5. Keep the `active` alias unchanged while invoking the published candidate
+   directly with valid and invalid Life2 JWTs. Exercise persisted create,
+   update, list, close and cross-tenant denial, plus existing authenticated
+   Todoist reads. Only then select the accepted alias version.
+
+This preserves the public API Gateway route and its alias rollback contract,
+but adds private networking, managed egress, database access and a migration
+mechanism. It is not a configuration-only change.
+
+## Option B: use the existing EC2 PostgreSQL network
+
+1. Create a dedicated `lists_service` database and least-privilege runtime
+   role on the existing production PostgreSQL instance, with separate
+   migration credentials. Keep its host binding loopback-only. Take and
+   restore-test a database backup before migration.
+2. Build an immutable Linux ARM64 Lists image from clean `main`. Run the REST
+   entrypoint as a candidate container on the existing internal
+   `personal-projects-postgresql` Docker network and a separate ingress
+   network. Its PostgreSQL URL and tenant/Todoist/JWT secrets need root-owned,
+   mode-0600 protected delivery, a non-logging parser, and explicit startup
+   validation. Use only the tenant-bound production secrets already authorized
+   for this service; verify the instance's AWS secret access before relying on
+   `SECRET_PROVIDER=aws`, or use reviewed file-backed equivalents.
+3. Run `001_loops.sql` through a separately scoped, one-shot migrator before
+   starting the candidate. Reject unexpected schema/migration checksums and
+   capture backup, migration and image digest evidence.
+4. Give the candidate a loopback-only host port. Prove readiness, authenticated
+   persisted Loop CRUD and isolation, existing Shopping/Task Lists reads,
+   negative authorization and outbound Todoist access through that port.
+5. Review a dedicated ALB/WAF/Apache host route, certificate coverage and
+   Route 53 ownership for `lists.life-sqrd.com`. Terraform currently owns the
+   API Gateway domain and A/AAAA aliases, so its ownership must be reconciled
+   before any DNS change. Stage and test the new host route without selecting
+   it; then perform a guarded ingress handoff with an exact rollback to the
+   still-healthy API Gateway alias. Verify canonical HTTPS and signed-in UI
+   behavior after handoff.
+
+This uses an existing private database network and avoids a new VPC database
+or NAT path. It requires a new guarded EC2 release contract and a public
+ingress handoff. Do not reuse Master Data's activator, credentials or tables.
+
+## Decision and release gates
+
+Option B is the narrower infrastructure change **if** the existing production
+PostgreSQL capacity, protected secret delivery, certificate and ALB/WAF/Apache
+route can be verified. It still has a significant ingress change. Option A is
+preferable if preserving the current API Gateway route outweighs the new
+private network, egress and database infrastructure. Neither is ready to
+execute from the current checkout.
+
+For either option, require a reviewed owner and rollback for the database and
+ingress, protected credentials, a restore-tested backup, migration result,
+immutable candidate identity, all source and real PostgreSQL integration
+gates, direct authenticated candidate acceptance (including denial across
+tenants), and a post-activation signed-in Loop flow. Preserve the 0.8.0 Lambda
+alias until those gates pass. A public heartbeat or anonymous 401 alone does
+not establish Loops persistence or tenant safety.

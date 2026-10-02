@@ -15,7 +15,7 @@ describe.skipIf(!databaseUrl)('PostgresLoopRepository on disposable PostgreSQL',
       { kind: 'entity' as const, recordId: 'entity-1', label: 'Household' },
       { kind: 'task' as const, recordId: 'task-1', label: 'Follow up' }
     ]
-  ) =>
+  ): Loop =>
     new Loop({
       id,
       accountId,

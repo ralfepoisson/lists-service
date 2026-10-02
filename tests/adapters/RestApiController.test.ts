@@ -170,7 +170,7 @@ describe('RestApiController', () => {
       path: string,
       body?: unknown,
       query: Record<string, string> = {}
-    ) =>
+    ): Promise<RestResponse> =>
       fixture.controller.handle(
         fixture.request({
           method: method as RestRequest['method'],

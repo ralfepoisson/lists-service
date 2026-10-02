@@ -13,6 +13,8 @@ note as StatusNote
   REST Lambda v2, canonical TLS/auth, and Todoist reads verified 2026-08-08.
   Tenant catalogue/project Task Lists has local automated evidence only.
   Multitenant provider acceptance and deployment remain pending.
+  Loops PostgreSQL is verified locally with disposable real-database tests;
+  production Lambda lacks VPC/database/migration wiring for Loops.
   Alexa and CI remain unverified.
 end note
 

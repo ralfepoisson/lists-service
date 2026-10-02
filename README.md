@@ -41,7 +41,9 @@ route targets rather than arbitrary URLs.
 
 This project is not created by, affiliated with, or supported by Doist.
 
-The implementation is complete for local/static verification. On 31 July 2026,
+The Loop implementation has local source and disposable PostgreSQL verification;
+the current production REST Lambda remains the earlier Shopping/Task Lists
+release. On 31 July 2026,
 the deployed local Lists boundary used the configured Todoist project to accept
 nine real item mutations and return all nine through a confirming active-list
 read. On 8 August 2026, REST Lambda version 2 from commit `67e8ba7` passed
@@ -240,6 +242,13 @@ terraform -chdir=terraform validate
 plantuml -checkonly docs/architecture/solution-architecture.puml docs/architecture/erd.puml
 ```
 
+The coverage gate for Loops requires a real PostgreSQL database. On this Mac,
+`./scripts/test-postgres-integration.sh --coverage` creates and removes an
+isolated Postgres.app 18 cluster, applies `001_loops.sql` twice, and runs the
+complete suite with real persistence. Set `POSTGRES_BIN_DIR` if Postgres.app is
+installed elsewhere. Plain `npm test` skips only that disposable-database spec;
+it cannot establish the Loop repository's persistence behavior.
+
 `npm run build` creates the local REST bundle, the Alexa Lambda bundle, and a
 `dist/rest-package/` directory containing the REST Lambda plus PDFKit's
 standard-font and colour-profile data. The local image copies the same data
@@ -263,6 +272,19 @@ boundary and do not establish that real credentials, Todoist, AWS, or Alexa
 work.
 
 ## Terraform production release
+
+The `0.9.0` Loops checkout cannot be published through the current production
+Terraform yet. The REST Lambda has no VPC attachment and Terraform provides no
+Lists PostgreSQL database, private network path, protected database credential,
+or migration execution gate. Its current `DATABASE_URL` startup requirement
+would prevent the candidate from initializing. Before any `--plan` or
+`--candidate` for this revision, review and provision a dedicated Lists database
+with backup and tenant isolation, connect Lambda through approved private
+networking while preserving outbound Todoist/Secrets Manager access, deliver
+the database credential without placing it in Terraform state, execute and
+verify migration `001_loops.sql` against that database, then prove the candidate
+with authenticated Loop reads and writes before alias activation. None of those
+production prerequisites is supplied by this checkout.
 
 Production uses a versioned, encrypted S3 backend with native lock files and
 published Lambda versions behind an explicit `active` alias. Never put secret

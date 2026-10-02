@@ -162,6 +162,114 @@ describe('RestApiController', () => {
     expect(automation.statusCode).toBe(403);
   });
 
+  it('reads, updates, filters, and explicitly closes Loops without crossing tenants', async () => {
+    const fixture = new RestControllerFixture();
+    const headers = { authorization: 'Bearer life2-tenant' };
+    const request = (
+      method: string,
+      path: string,
+      body?: unknown,
+      query: Record<string, string> = {}
+    ) =>
+      fixture.controller.handle(
+        fixture.request({
+          method: method as RestRequest['method'],
+          path,
+          headers,
+          query,
+          ...(body === undefined ? {} : { body: JSON.stringify(body) })
+        })
+      );
+
+    expect(
+      (
+        await request('POST', '/v1/loops', {
+          title: 'Follow up',
+          description: 'Details',
+          outcome: 'Done',
+          dueDate: '2026-10-15',
+          priority: 'high',
+          relatedRecords: [{ kind: 'entity', recordId: 'entity-1', label: 'Person' }]
+        })
+      ).statusCode
+    ).toBe(201);
+    const own = await request('GET', '/v1/loops/loop-1');
+    expect(JSON.parse(own.body).data).toMatchObject({ id: 'loop-1', dueDate: '2026-10-15' });
+    const foreign = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/loops/loop-1',
+        headers: { authorization: 'Bearer life2-other' }
+      })
+    );
+    expect(foreign.statusCode).toBe(404);
+    const changed = await request('PATCH', '/v1/loops/loop-1', {
+      title: 'Updated',
+      description: null,
+      dueDate: null,
+      priority: 'low',
+      relatedRecords: []
+    });
+    expect(JSON.parse(changed.body).data).toMatchObject({
+      title: 'Updated',
+      priority: 'low',
+      relatedRecords: []
+    });
+    expect(
+      JSON.parse((await request('GET', '/v1/loops', undefined, { status: 'closed' })).body).data
+    ).toEqual([]);
+    expect((await request('POST', '/v1/loops/loop-1/close', { confirmed: false })).statusCode).toBe(
+      400
+    );
+    const closed = await request('POST', '/v1/loops/loop-1/close', { confirmed: true });
+    expect(JSON.parse(closed.body).data.status).toBe('closed');
+    expect(
+      JSON.parse((await request('GET', '/v1/loops', undefined, { status: 'closed' })).body).data
+    ).toHaveLength(1);
+    expect((await request('PATCH', '/v1/loops/loop-1', { title: 'Too late' })).statusCode).toBe(
+      400
+    );
+    expect((await request('GET', '/v1/loops/missing')).statusCode).toBe(404);
+  });
+
+  it('rejects malformed Loop bodies, unsupported fields, and automation reads', async () => {
+    const fixture = new RestControllerFixture();
+    const headers = { authorization: 'Bearer life2-tenant' };
+    for (const [path, method, body] of [
+      ['/v1/loops', 'POST', undefined],
+      ['/v1/loops', 'POST', '{'],
+      ['/v1/loops', 'POST', '[]'],
+      ['/v1/loops', 'POST', '{"title":"T","outcome":"O","accountId":"tenant-b"}'],
+      ['/v1/loops', 'POST', '{"title":12,"outcome":"O"}'],
+      ['/v1/loops', 'POST', '{"title":"T","outcome":"O","relatedRecords":{}}'],
+      [
+        '/v1/loops',
+        'POST',
+        '{"title":"T","outcome":"O","relatedRecords":[{"kind":"task","recordId":"x","label":"X","url":"https://example.com"}]}'
+      ],
+      ['/v1/loops/missing', 'PATCH', '{}'],
+      ['/v1/loops/missing', 'PATCH', '{"title":123}'],
+      ['/v1/loops/missing/close', 'POST', '{"confirmed":false}']
+    ] as const) {
+      const response = await fixture.controller.handle(
+        fixture.request({ path, method, headers, ...(body === undefined ? {} : { body }) })
+      );
+      expect(response.statusCode, `${method} ${path} ${body}`).toBe(400);
+    }
+    expect(
+      (
+        await fixture.controller.handle(
+          fixture.request({ path: '/v1/loops', headers, query: { status: 'invalid' } })
+        )
+      ).statusCode
+    ).toBe(400);
+    for (const path of ['/v1/loops', '/v1/loops/loop-1']) {
+      const response = await fixture.controller.handle(
+        fixture.request({ path, headers: { authorization: 'Bearer rest-secret' } })
+      );
+      expect(response.statusCode).toBe(403);
+    }
+  });
+
   it('serves unauthenticated liveness without checking Todoist', async () => {
     const fixture = new RestControllerFixture();
 

@@ -2,9 +2,9 @@
 
 ## Status
 
-Accepted in source on 30 September 2026. Local migration and runtime acceptance
-remain pending explicit approval because they change the native development
-database and running containers.
+Accepted in source on 30 September 2026. The local migration and signed-in
+runtime were verified on 2 October 2026. Production migration and network
+acceptance remain pending.
 
 ## Context
 
@@ -33,3 +33,9 @@ its referenced records remain independently available from their owning
 services. A source record can be absent or inaccessible without changing the
 Loop; the UI and agent preserve the supplied reference rather than inventing
 its state.
+
+The existing production REST Lambda is outside a VPC and the Lists Terraform
+release has no PostgreSQL credential or migration path. A release of this
+revision must first add private database connectivity and a protected migration
+gate; the existing Shopping/Task Lists production alias must remain selected
+until direct candidate acceptance includes real Loop persistence.

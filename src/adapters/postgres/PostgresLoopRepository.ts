@@ -37,6 +37,10 @@ export class PostgresLoopRepository implements LoopRepository {
     this.pool = new Pool({ connectionString: databaseUrl });
   }
 
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
+
   async create(loop: Loop): Promise<Loop> {
     const client = await this.pool.connect();
     try {
@@ -74,7 +78,7 @@ export class PostgresLoopRepository implements LoopRepository {
 
   async findById(accountId: string, id: string): Promise<Loop | undefined> {
     const result = await this.pool.query<LoopRow>(
-      `SELECT id, account_id, title, description, priority, outcome, due_date, status, created_by_sub, updated_by_sub,
+      `SELECT id, account_id, title, description, priority, outcome, due_date::text AS due_date, status, created_by_sub, updated_by_sub,
               created_at, updated_at, closed_at
          FROM loops WHERE account_id = $1 AND id = $2`,
       [accountId, id]
@@ -85,7 +89,7 @@ export class PostgresLoopRepository implements LoopRepository {
 
   async list(accountId: string, status: 'open' | 'closed' | 'all'): Promise<Loop[]> {
     const result = await this.pool.query<LoopRow>(
-      `SELECT id, account_id, title, description, priority, outcome, due_date, status, created_by_sub, updated_by_sub,
+      `SELECT id, account_id, title, description, priority, outcome, due_date::text AS due_date, status, created_by_sub, updated_by_sub,
               created_at, updated_at, closed_at
          FROM loops
         WHERE account_id = $1 AND ($2 = 'all' OR status = $2)

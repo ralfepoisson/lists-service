@@ -136,7 +136,12 @@ export class LoopService {
 
   private optionalDate(value: string | undefined): string | undefined {
     if (value === undefined) return undefined;
-    if (!/^\d{4}-\d{2}-\d{2}$/u.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+    const parsed = Date.parse(`${value}T00:00:00Z`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/u.test(value) ||
+      Number.isNaN(parsed) ||
+      new Date(parsed).toISOString().slice(0, 10) !== value
+    ) {
       throw new ValidationError('dueDate must be an ISO calendar date (YYYY-MM-DD).');
     }
     return value;

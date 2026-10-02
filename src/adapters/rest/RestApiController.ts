@@ -305,9 +305,14 @@ export class RestApiController {
     if (request.path === '/v1/loops' && request.method === 'GET') {
       const status = this.parseLoopStatus(request.query['status']);
       const loops = await this.loopService.list(accountId, status);
-      return this.success(200, loops.map((loop) => this.publicLoop(loop)), request.requestId, {
-        count: loops.length
-      });
+      return this.success(
+        200,
+        loops.map((loop) => this.publicLoop(loop)),
+        request.requestId,
+        {
+          count: loops.length
+        }
+      );
     }
     if (request.path === '/v1/loops' && request.method === 'POST') {
       return this.success(

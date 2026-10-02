@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Life2 Lists Service REST API
-  version: 0.7.0
+  version: 0.9.0
   description: |
     Todoist remains the system of record. Shopping resolves the authenticated
     principal's verified or deployment-bound account through the tenant catalogue.

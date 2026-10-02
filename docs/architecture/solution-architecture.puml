@@ -15,8 +15,10 @@ note as StatusNote
   Multitenant provider acceptance and deployment remain pending.
   Loops PostgreSQL is verified locally with disposable real-database tests;
   production Lambda lacks VPC/database/migration wiring for Loops.
-  A guarded EC2 candidate package exists in source only; it is not installed
-  and it does not select production ingress.
+  Guarded EC2 host tools and an empty Lists database are installed, but no
+  migration, candidate acceptance, or production ingress selection exists.
+  Terraform retains the API Gateway domain and Lambda alias during a future
+  DNS-only A/AAAA handoff to the accepted ALB/Apache route.
   Alexa and CI remain unverified.
 end note
 
@@ -30,6 +32,8 @@ component "Local lists-api\nNode container" as LocalApi
 cloud "AWS" {
   component "Route53 aliases\nlists.life-sqrd.com" as Route53
   component "API Gateway\nregional custom domain\nraw endpoint disabled" as ApiGateway
+  component "Consolidated ALB\nWAF + wildcard TLS\nLists host rule staged later" as Alb
+  component "Apache :8080\nLists vhost staged later" as Apache
   component "REST active alias\naccepted version" as RestAlias
   component "Alexa active alias\naccepted version" as AlexaAlias
 
@@ -82,7 +86,7 @@ cloud "AWS" {
 
 file "Local read-only\nsecret mounts" as LocalSecrets
 component "Node REST composition\nfile or AWS secrets" as LocalComposition
-package "Source-prepared EC2 candidate (not installed)" as Ec2Candidate {
+package "EC2 candidate prerequisites (not active)" as Ec2Candidate {
   component "Immutable ARM64 digest +\nmanifest/revision/migration hash" as CandidateManifest
   component "Protected runtime, migration, backup env\n+ root-only smoke JWTs" as CandidateSecrets
   component "One-time database provisioner\nfixed four-role grants + root-only env" as DatabaseProvisioner
@@ -100,6 +104,9 @@ Household --> Alexa
 RestClient --> ApiGateway : HTTPS + bearer token
 Webapp --> ApiGateway : HTTPS + Life2 JWT
 Route53 --> ApiGateway
+Route53 ..> Alb : future guarded A/AAAA switch
+Alb ..> Apache : staged Lists host rule
+Apache ..> CandidateApi : accepted loopback port
 Webapp --> LocalProxy : local same-origin request
 LocalProxy --> LocalApi
 LocalApi --> LocalComposition

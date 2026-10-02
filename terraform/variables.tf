@@ -119,6 +119,38 @@ variable "rest_domain_name" {
   }
 }
 
+variable "rest_ingress_target" {
+  description = "Explicit production DNS authority: api_gateway retains the active Lambda route; alb selects the separately accepted EC2 ingress."
+  type        = string
+
+  validation {
+    condition     = contains(["api_gateway", "alb"], var.rest_ingress_target)
+    error_message = "rest_ingress_target must be api_gateway or alb."
+  }
+}
+
+variable "rest_alb_dns_name" {
+  description = "Reviewed consolidated ALB DNS name; required only when rest_ingress_target is alb."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.rest_alb_dns_name == "" || can(regex("^[a-z0-9.-]+\\.elb\\.amazonaws\\.com$", var.rest_alb_dns_name))
+    error_message = "rest_alb_dns_name must be a reviewed ALB DNS hostname."
+  }
+}
+
+variable "rest_alb_zone_id" {
+  description = "Reviewed ALB canonical hosted-zone ID; required only when rest_ingress_target is alb."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.rest_alb_zone_id == "" || can(regex("^Z[A-Z0-9]+$", var.rest_alb_zone_id))
+    error_message = "rest_alb_zone_id must be a Route 53 hosted-zone ID."
+  }
+}
+
 variable "route53_zone_id" {
   description = "Route53 hosted zone containing rest_domain_name."
   type        = string

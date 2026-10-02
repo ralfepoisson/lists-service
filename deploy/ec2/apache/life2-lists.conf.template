@@ -1,0 +1,12 @@
+# Review artifact only. Render the verified candidate's actual loopback port
+# (43240 or 43241), validate Apache, and stage without selecting Route 53.
+<VirtualHost *:8080>
+    ServerName lists.life-sqrd.com
+    ProxyRequests Off
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto "https"
+    ProxyPass        / http://127.0.0.1:@LISTS_PORT@/ connectiontimeout=5 timeout=30 retry=0
+    ProxyPassReverse / http://127.0.0.1:@LISTS_PORT@/
+    ErrorLog ${APACHE_LOG_DIR}/life2-lists-error.log
+    CustomLog ${APACHE_LOG_DIR}/life2-lists-access.log combined
+</VirtualHost>

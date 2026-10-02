@@ -2,6 +2,11 @@
 
 This plan describes the missing production boundary for the 0.9.0 Lists
 checkout. It changes neither infrastructure nor the active 0.8.0 REST alias.
+The 2026-10-02 host assessment below is historical: as of 2026-10-03 the
+dedicated empty Lists database/roles, protected environment and narrow host
+permissions are present. The migration, dual-tenant candidate gate and
+[ingress handoff](ingress-handoff.md) remain pending. Recheck live state and
+the latest implementation entries before release action.
 The current `lists.life-sqrd.com` route is Route 53 → API Gateway HTTP API →
 REST Lambda `active` alias. The REST Lambda has no VPC attachment and no
 `DATABASE_URL`; `AppConfig.fromRestEnvironment` now requires that value before

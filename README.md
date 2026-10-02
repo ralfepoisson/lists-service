@@ -56,9 +56,12 @@ The canonical production origin for the REST API is
 `https://lists.life-sqrd.com`.
 
 Terraform owns the API Gateway regional custom domain and Route53 aliases for
-this hostname. They are created only after an immutable REST Lambda candidate
-has passed direct authenticated acceptance and its published version is chosen
-for the `active` alias. The raw API Gateway endpoint is disabled.
+this hostname. The explicit `rest_ingress_target` selector keeps both A/AAAA
+aliases on the current API Gateway route until a separate, authenticated EC2
+candidate and ALB/Apache path are accepted. The API Gateway domain/mapping and
+REST Lambda `active` alias are retained for exact DNS rollback. See the
+[guarded ingress handoff](docs/ingress-handoff.md). The raw API Gateway
+endpoint is disabled.
 
 ## Scope
 
@@ -292,10 +295,12 @@ PostgreSQL network. It includes a one-time, root-installed database provisioner
 that refuses existing Lists data and writes separate protected runtime,
 migration and backup credentials. A disposable real PostgreSQL role and archive
 gate runs with `./scripts/test-postgres-integration.sh --roles-only` even when
-JavaScript dependencies are unavailable. Source tooling does not itself create
-the production database or select ingress. The host still needs reviewed
-database provisioning, narrowly scoped secret permission, protected real JWT
-smoke tokens, and a separate ingress handoff. The Lambda `active` alias stays
+JavaScript dependencies are unavailable. Source tooling does not itself select
+ingress. The production database/roles and scoped host permission now exist,
+but migration and candidate acceptance still need two distinct fresh Auth
+tenant JWTs at the protected host paths. The separate
+[ingress handoff](docs/ingress-handoff.md) stays source-only until those gates
+pass. The Lambda `active` alias stays
 on the accepted release until authenticated candidate and public acceptance.
 
 Production uses a versioned, encrypted S3 backend with native lock files and

@@ -25,6 +25,7 @@ set -a
 set +a
 for name in AWS_REGION TF_STATE_BUCKET TF_STATE_KEY ROUTE53_ZONE_ID \
   REST_CERTIFICATE_ARN REST_DOMAIN_NAME \
+  REST_INGRESS_TARGET \
   TODOIST_TENANT_CATALOG_SECRET_ARN TODOIST_TENANT_TOKEN_SECRET_ARNS \
   REST_API_TOKEN_SECRET_ARN LIFE2_JWT_SIGNING_KEY_SECRET_ARN \
   LIFE2_ALLOWED_ACCOUNT_ID; do
@@ -35,6 +36,14 @@ for name in AWS_REGION TF_STATE_BUCKET TF_STATE_KEY ROUTE53_ZONE_ID \
   fi
 done
 case "$REST_DOMAIN_NAME" in lists.life-sqrd.com) ;; *) echo "unexpected production domain" >&2; exit 65 ;; esac
+case "$REST_INGRESS_TARGET" in
+  api_gateway) ;;
+  alb)
+    [ -n "${REST_ALB_DNS_NAME:-}" ] && [ -n "${REST_ALB_ZONE_ID:-}" ] || {
+      echo "ALB ingress requires reviewed ALB DNS name and zone ID" >&2; exit 65;
+    } ;;
+  *) echo "REST_INGRESS_TARGET must be api_gateway or alb" >&2; exit 65 ;;
+esac
 case "${REST_ACTIVE_VERSION:-}" in ''|[1-9]*[!0-9]*|0|*[!0-9]*) [ -z "${REST_ACTIVE_VERSION:-}" ] || { echo "REST_ACTIVE_VERSION must be a positive published version" >&2; exit 65; } ;; esac
 case "${ALEXA_ACTIVE_VERSION:-}" in ''|[1-9]*[!0-9]*|0|*[!0-9]*) [ -z "${ALEXA_ACTIVE_VERSION:-}" ] || { echo "ALEXA_ACTIVE_VERSION must be a positive published version" >&2; exit 65; } ;; esac
 if [ -n "${ALEXA_ACTIVE_VERSION:-}" ] && [ -z "${ALEXA_SKILL_ID:-}" ]; then

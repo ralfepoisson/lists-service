@@ -44,8 +44,10 @@ The existing PostgreSQL host binding stays `127.0.0.1:5432`; no new public
 database listener is needed. The restore role needs PostgreSQL `CREATEDB`
 privilege and owns its uniquely named scratch database. `CREATEDB` is a
 cluster-level grant, so review its breadth, role separation, capacity,
-database backup retention and recovery before provisioning. No Lists database
-or role has yet been created on the host.
+database backup retention and recovery before provisioning. The dedicated
+production Lists database and four roles were provisioned on 2026-10-03; the
+database remains empty with zero public tables and no migration. Check the
+dated implementation entries and inspect live state before staging.
 
 The reviewed host-tool installer also installs `database_provision.py`. Its
 fixed first-use procedure requires a root-owned, single-link mode-0600
@@ -167,12 +169,17 @@ alias and published 0.8.0 version are the retained rollback route. Before any
 future switch, capture the exact Route 53 A/AAAA record sets, API Gateway
 domain/mapping, Lambda alias target, ALB listener rules/priority, wildcard ACM
 certificate attachment, Apache site, WAF association and current canonical
-TLS/authenticated responses in a protected change record. Terraform currently
-owns the API Gateway domain and DNS aliases, so review state ownership before
-changing records. Stage and validate an Apache candidate vhost and ALB host
-rule without selecting DNS; verify the canonical host through a controlled
-Host-header route first. Only then move A/AAAA together and prove signed-in
-Loops, Shopping and Task Lists through public HTTPS.
+TLS/authenticated responses in a protected change record. Terraform owns the
+API Gateway domain and DNS aliases. Its explicit `rest_ingress_target`
+selector changes only the A/AAAA alias targets while retaining the API Gateway
+domain/mapping and REST Lambda `active` alias. Use the
+[guarded ingress handoff](ingress-handoff.md), including its saved-plan
+validator, to review ownership and limit the change to both DNS records.
+Render and validate the [Apache vhost template](../deploy/ec2/apache/life2-lists.conf.template)
+with the actual accepted candidate port; stage it with an ALB host rule without
+selecting DNS. Verify the canonical host through a controlled Host-header
+route first. Only then move A/AAAA together and prove signed-in Loops,
+Shopping and Task Lists through public HTTPS.
 
 If the public path fails, restore the **captured exact** A/AAAA aliases to the
 API Gateway regional target and hosted-zone IDs, remove the Lists ALB host

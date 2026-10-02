@@ -5,6 +5,8 @@ locals {
   rest_activation_enabled  = var.rest_active_version != ""
   alexa_enabled            = var.alexa_skill_id != ""
   alexa_activation_enabled = local.alexa_enabled && var.alexa_active_version != ""
+  rest_alias_name          = var.rest_ingress_target == "alb" ? var.rest_alb_dns_name : aws_apigatewayv2_domain_name.rest[0].domain_name_configuration[0].target_domain_name
+  rest_alias_zone_id       = var.rest_ingress_target == "alb" ? var.rest_alb_zone_id : aws_apigatewayv2_domain_name.rest[0].domain_name_configuration[0].hosted_zone_id
   todoist_environment = {
     COMPLETED_LOOKBACK_DAYS = tostring(var.completed_lookback_days)
     LOG_LEVEL               = var.log_level
@@ -320,9 +322,16 @@ resource "aws_route53_record" "rest_ipv4" {
   name    = var.rest_domain_name
   type    = "A"
 
+  lifecycle {
+    precondition {
+      condition     = var.rest_ingress_target != "alb" || (var.rest_alb_dns_name != "" && var.rest_alb_zone_id != "")
+      error_message = "ALB ingress requires the reviewed DNS name and canonical hosted-zone ID."
+    }
+  }
+
   alias {
-    name                   = aws_apigatewayv2_domain_name.rest[0].domain_name_configuration[0].target_domain_name
-    zone_id                = aws_apigatewayv2_domain_name.rest[0].domain_name_configuration[0].hosted_zone_id
+    name                   = local.rest_alias_name
+    zone_id                = local.rest_alias_zone_id
     evaluate_target_health = false
   }
 }
@@ -333,9 +342,16 @@ resource "aws_route53_record" "rest_ipv6" {
   name    = var.rest_domain_name
   type    = "AAAA"
 
+  lifecycle {
+    precondition {
+      condition     = var.rest_ingress_target != "alb" || (var.rest_alb_dns_name != "" && var.rest_alb_zone_id != "")
+      error_message = "ALB ingress requires the reviewed DNS name and canonical hosted-zone ID."
+    }
+  }
+
   alias {
-    name                   = aws_apigatewayv2_domain_name.rest[0].domain_name_configuration[0].target_domain_name
-    zone_id                = aws_apigatewayv2_domain_name.rest[0].domain_name_configuration[0].hosted_zone_id
+    name                   = local.rest_alias_name
+    zone_id                = local.rest_alias_zone_id
     evaluate_target_health = false
   }
 }

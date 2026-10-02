@@ -71,6 +71,38 @@ This uses an existing private database network and avoids a new VPC database
 or NAT path. It requires a new guarded EC2 release contract and a public
 ingress handoff. Do not reuse Master Data's activator, credentials or tables.
 
+### Read-only host and AWS assessment on 2 October 2026
+
+- The production host reports PostgreSQL accepting connections at
+  `127.0.0.1:5432`; the Master Data release contract identifies its internal
+  network as `personal-projects-postgresql`. This establishes a possible
+  co-located database path, not a Lists database or a right to share Master
+  Data's database role.
+- The consolidated ALB's HTTPS listener already has an issued
+  `*.life-sqrd.com` certificate. Its host rules and the production Apache
+  `:8080` vhosts contain no `lists.life-sqrd.com` route. The existing Lists
+  Route 53 A/AAAA records and custom domain are managed by this repository's
+  API Gateway Terraform state.
+- The production host instance role has no `secretsmanager` action in its
+  reviewed inline policies or attached container-runtime policy. The
+  file-secret REST entrypoint can run on EC2, but the current AWS tenant
+  catalogue cannot simply be copied into its file mode: it references
+  Secrets Manager token ARNs rather than mounted absolute file paths. A
+  reviewed least-privilege role policy plus an AWS-capable HTTP composition,
+  or a protected file catalogue and token delivery/rotation procedure, is
+  required before candidate startup.
+- ECR currently has no Lists repository, and the host has no Lists release
+  activator, candidate environment, Apache site, ALB rule, or verified Lists
+  PostgreSQL role/database. `/srv` has 6.9 GB free at 97% use; capacity for
+  image plus retained rollback and backups must be checked during staging.
+
+Therefore Option B cannot be safely executed by changing Compose alone. A
+source-side candidate package should be prepared only with an immutable image
+digest, separate preinstalled host validator/activator, protected credential
+delivery, migration backup/checksum gate, candidate loopback smoke, and an
+explicit ingress rollback. Those components require an independently reviewed
+host installation and real candidate acceptance before the DNS/ALB switch.
+
 ## Decision and release gates
 
 Option B is the narrower infrastructure change **if** the existing production

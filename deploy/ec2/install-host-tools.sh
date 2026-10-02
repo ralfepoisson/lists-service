@@ -4,7 +4,7 @@ umask 077
 
 source_dir="$(cd "$(dirname "$0")" && pwd -P)"
 check_source_syntax() {
-  for name in release_contract.py backup_restore.py candidate_smoke.py host_candidate.py; do
+  for name in release_contract.py backup_restore.py candidate_smoke.py host_candidate.py database_provision.py; do
     /usr/bin/python3 -m py_compile "$source_dir/$name"
   done
   /bin/bash -n "$source_dir/life2-lists-candidate"
@@ -25,7 +25,7 @@ fi
    "$(stat -c '%a' "$source_dir")" == 700 && ! -L "$source_dir" ]] || {
   echo 'root-controlled source directory required' >&2; exit 65
 }
-for name in release_contract.py backup_restore.py candidate_smoke.py host_candidate.py life2-lists-candidate; do
+for name in release_contract.py backup_restore.py candidate_smoke.py host_candidate.py database_provision.py life2-lists-candidate; do
   source="$source_dir/$name"
   [[ -f "$source" && ! -L "$source" && "$(stat -c '%u:%g:%h' "$source")" == 0:0:1 ]] || {
     echo 'untrusted host-tool source metadata' >&2; exit 65
@@ -33,7 +33,7 @@ for name in release_contract.py backup_restore.py candidate_smoke.py host_candid
 done
 check_source_syntax
 install -d -o root -g root -m 0755 /usr/local/libexec/life2-lists
-for name in release_contract.py backup_restore.py candidate_smoke.py host_candidate.py; do
+for name in release_contract.py backup_restore.py candidate_smoke.py host_candidate.py database_provision.py; do
   install -o root -g root -m 0755 "$source_dir/$name" "/usr/local/libexec/life2-lists/$name"
 done
 install -o root -g root -m 0755 "$source_dir/life2-lists-candidate" /usr/local/sbin/life2-lists-candidate

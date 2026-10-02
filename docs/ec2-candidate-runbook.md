@@ -47,6 +47,60 @@ cluster-level grant, so review its breadth, role separation, capacity,
 database backup retention and recovery before provisioning. No Lists database
 or role has yet been created on the host.
 
+The reviewed host-tool installer also installs `database_provision.py`. Its
+fixed first-use procedure requires a root-owned, single-link mode-0600
+`/srv/apps/life2-lists/shared/provision.env` under the root-owned mode-0700
+`shared` directory. Supply exactly the three in-account Secrets Manager ARN
+references named below, `LIFE2_ALLOWED_ACCOUNT_ID`, and four **distinct**
+cryptographically generated, URL-safe database passwords of 40–128 characters:
+
+```text
+REST_API_TOKEN_SECRET_ARN=<reviewed ARN>
+LIFE2_JWT_SIGNING_KEY_SECRET_ARN=<reviewed ARN>
+TODOIST_TENANT_CATALOG_SECRET_ARN=<reviewed ARN>
+LIFE2_ALLOWED_ACCOUNT_ID=<reviewed account identifier>
+PGPASSWORD_RUNTIME=<private value>
+PGPASSWORD_MIGRATOR=<private value>
+PGPASSWORD_BACKUP=<private value>
+PGPASSWORD_RESTORE=<private value>
+```
+
+Populate this file through a private operator channel. Never place values in
+Git, a command argument, shell history, chat, or a test fixture; keep the
+protected input for recovery. After separately installing reviewed host tools,
+run the source syntax gate and the non-mutating plan first:
+
+```sh
+bash deploy/ec2/install-host-tools.sh --check-source
+sudo /usr/bin/python3 /usr/local/libexec/life2-lists/database_provision.py \
+  /srv/apps/life2-lists/shared/provision.env
+```
+
+Only after reviewing the fixed four-role grant plan and the cluster-wide
+`CREATEDB` exposure, apply exactly once:
+
+```sh
+sudo /usr/bin/python3 /usr/local/libexec/life2-lists/database_provision.py \
+  /srv/apps/life2-lists/shared/provision.env \
+  --apply --acknowledge-restore-createdb
+```
+
+The command refuses any pre-existing Lists database, role, or output file. It
+creates `lists_migrator` as database/schema owner, `lists_runtime` with only
+table SELECT/INSERT/UPDATE/DELETE, `lists_backup` with table SELECT, and
+`lists_restore` with no connection to the production Lists database. The
+migrator's default privileges cover tables created by `001_loops.sql`.
+PostgreSQL cannot scope `CREATEDB` to a database-name prefix: the restore
+role receives that cluster privilege solely so the fixed host helper can
+create and drop an unpredictable `lists_restore_*` scratch database. Keep its
+credential only in `backup.env`, execute the helper as installed root-owned
+code, and review this grant and database capacity before staging. The tool
+then writes `runtime.env`, `migration.env`, and `backup.env` as separate
+root-owned mode-0600 files without printing their values. A partial failure
+requires private operator reconciliation; never rerun by dropping an existing
+database or rotating a password blindly. The real isolated role and archive
+test is `./scripts/test-postgres-integration.sh --roles-only`.
+
 Place these exact root-owned, single-link mode-0600 files in the root-only
 `/srv/apps/life2-lists/shared/` directory. The candidate validator parses
 literal `KEY=value` lines; it never sources them as shell code or logs values.

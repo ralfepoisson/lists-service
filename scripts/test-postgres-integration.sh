@@ -32,6 +32,10 @@ export DATABASE_URL="postgresql://lists_test@127.0.0.1:$port/postgres"
 export LISTS_TEST_DATABASE_URL="$DATABASE_URL"
 export POSTGRES_BIN_DIR="$postgres_bin_dir"
 cd "$repository_root"
+if [[ "${1:-}" == --roles-only ]]; then
+  python3 -m unittest discover -s tests/release -p 'test_database_provision.py' -v
+  exit 0
+fi
 npm run build
 node dist/migrate.cjs
 node dist/migrate.cjs

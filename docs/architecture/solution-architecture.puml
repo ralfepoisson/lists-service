@@ -85,6 +85,7 @@ component "Node REST composition\nfile or AWS secrets" as LocalComposition
 package "Source-prepared EC2 candidate (not installed)" as Ec2Candidate {
   component "Immutable ARM64 digest +\nmanifest/revision/migration hash" as CandidateManifest
   component "Protected runtime, migration, backup env\n+ root-only smoke JWTs" as CandidateSecrets
+  component "One-time database provisioner\nfixed four-role grants + root-only env" as DatabaseProvisioner
   component "Backup + scratch restore gate" as RestoreGate
   component "Loopback API + authenticated\ntenant-isolation smoke" as CandidateApi
 }
@@ -105,6 +106,8 @@ LocalApi --> LocalComposition
 LocalComposition --> RestAdapter
 LocalComposition --> SecretProvider : configured backend
 CandidateManifest --> CandidateApi : exact image digest
+DatabaseProvisioner --> LoopDatabase : dedicated DB; migrator owns schema
+DatabaseProvisioner --> CandidateSecrets : separate mode-0600 files
 CandidateSecrets --> CandidateApi : AWS secret ARNs + runtime DB role
 CandidateSecrets --> RestoreGate : distinct backup/restore roles
 RestoreGate --> LoopDatabase : verified pre-migration archive

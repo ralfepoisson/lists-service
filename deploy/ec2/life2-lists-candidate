@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$EUID" -eq 0 ]] || { echo 'candidate runner requires root' >&2; exit 65; }
+[[ "${BASH_SOURCE[0]}" == /usr/local/sbin/life2-lists-candidate ]] || {
+  echo 'candidate runner is not installed' >&2; exit 65
+}
+[[ -f "${BASH_SOURCE[0]}" && ! -L "${BASH_SOURCE[0]}" && \
+   "$(stat -c '%u:%g:%a:%h' "${BASH_SOURCE[0]}")" == 0:0:755:1 ]] || {
+  echo 'candidate runner metadata invalid' >&2; exit 65
+}
+exec /usr/bin/python3 /usr/local/libexec/life2-lists/host_candidate.py "$@"

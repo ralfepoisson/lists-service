@@ -96,12 +96,13 @@ ingress handoff. Do not reuse Master Data's activator, credentials or tables.
   PostgreSQL role/database. `/srv` has 6.9 GB free at 97% use; capacity for
   image plus retained rollback and backups must be checked during staging.
 
-Therefore Option B cannot be safely executed by changing Compose alone. A
-source-side candidate package should be prepared only with an immutable image
-digest, separate preinstalled host validator/activator, protected credential
-delivery, migration backup/checksum gate, candidate loopback smoke, and an
-explicit ingress rollback. Those components require an independently reviewed
-host installation and real candidate acceptance before the DNS/ALB switch.
+Option B now has a source-side, candidate-only release package, described in
+[`ec2-candidate-runbook.md`](ec2-candidate-runbook.md). It binds an immutable
+image digest and migration checksum, uses separately installed host tooling
+and protected credentials, restore-tests a database backup, and requires real
+loopback tenant acceptance. It has not been installed or run in production.
+Host provisioning, real candidate acceptance and an independently reviewed
+ingress handoff are still required before the DNS/ALB switch.
 
 ## Decision and release gates
 
@@ -109,8 +110,8 @@ Option B is the narrower infrastructure change **if** the existing production
 PostgreSQL capacity, protected secret delivery, certificate and ALB/WAF/Apache
 route can be verified. It still has a significant ingress change. Option A is
 preferable if preserving the current API Gateway route outweighs the new
-private network, egress and database infrastructure. Neither is ready to
-execute from the current checkout.
+private network, egress and database infrastructure. Neither can yet serve
+production Loops from the current checkout.
 
 For either option, require a reviewed owner and rollback for the database and
 ingress, protected credentials, a restore-tested backup, migration result,

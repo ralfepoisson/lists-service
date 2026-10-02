@@ -6,8 +6,9 @@ hide stereotypes
 skinparam shadowing false
 
 note as StatusNote
-  IMPLEMENTED LOGICAL MODEL - NOT A LOCAL DATABASE
-  Todoist remains the system of record.
+  IMPLEMENTED LOGICAL MODEL
+  Todoist remains the list/task system of record.
+  Loops are Lists-owned PostgreSQL records, verified on a disposable database.
   Provider fields were checked against Todoist API v1.
   Tenant catalogue/project mapping has local automated evidence;
   multitenant live-provider and deployment evidence remain pending.
@@ -95,6 +96,12 @@ entity "Loop related record" as LoopReference {
   ordinal : small integer
 }
 
+entity "Lists schema migration" as Migration {
+  * name : varchar(255)
+  --
+  appliedAt : timestamptz
+}
+
 Project ||--o{ Item : contains
 Connection ..> Project : token exposes existing lists
 Connection ||--|| TenantToken : references
@@ -103,6 +110,7 @@ Configuration ..> Project : selects tenant Shopping project
 Project ||..o{ SearchHit : projected on demand
 Item ||..o{ SearchHit : active tasks projected on demand
 Loop ||--o{ LoopReference : brings together record references
+Migration ..> Loop : 001_loops.sql creates
 
 note right of Configuration
   Stores references and identifiers only.

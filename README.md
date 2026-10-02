@@ -286,6 +286,16 @@ verify migration `001_loops.sql` against that database, then prove the candidate
 with authenticated Loop reads and writes before alias activation. None of those
 production prerequisites is supplied by this checkout.
 
+A separate [guarded EC2 candidate package](docs/ec2-candidate-runbook.md) now
+prepares an immutable 0.9.0 image and a candidate-only runtime on the existing
+PostgreSQL network. Its manifest, protected-file and real database backup
+gates have local tests; the host helper has not been installed or invoked on
+the production host. It
+requires a new Lists ECR repository, dedicated database and roles, narrowly
+scoped host secret permission, protected real JWT smoke tokens, and a separately
+reviewed ingress handoff. It never selects the public route or changes the
+Lambda `active` alias.
+
 Production uses a versioned, encrypted S3 backend with native lock files and
 published Lambda versions behind an explicit `active` alias. Never put secret
 values in Terraform variables or state. Copy `deploy/production.env.example`

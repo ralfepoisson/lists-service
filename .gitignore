@@ -1,9 +1,12 @@
 .DS_Store
 .env
 .terraform/
+__pycache__/
+*.pyc
 *.tfstate
 *.tfstate.*
 coverage/
 dist/
+release-output/
 node_modules/
 terraform/*.zip

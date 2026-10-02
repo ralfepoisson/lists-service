@@ -15,6 +15,8 @@ note as StatusNote
   Multitenant provider acceptance and deployment remain pending.
   Loops PostgreSQL is verified locally with disposable real-database tests;
   production Lambda lacks VPC/database/migration wiring for Loops.
+  A guarded EC2 candidate package exists in source only; it is not installed
+  and it does not select production ingress.
   Alexa and CI remain unverified.
 end note
 
@@ -79,7 +81,13 @@ cloud "AWS" {
 }
 
 file "Local read-only\nsecret mounts" as LocalSecrets
-component "Local REST composition\nfile secrets only" as LocalComposition
+component "Node REST composition\nfile or AWS secrets" as LocalComposition
+package "Source-prepared EC2 candidate (not installed)" as Ec2Candidate {
+  component "Immutable ARM64 digest +\nmanifest/revision/migration hash" as CandidateManifest
+  component "Protected runtime, migration, backup env\n+ root-only smoke JWTs" as CandidateSecrets
+  component "Backup + scratch restore gate" as RestoreGate
+  component "Loopback API + authenticated\ntenant-isolation smoke" as CandidateApi
+}
 
 cloud "Todoist" {
   component "Official Todoist REST API" as TodoistApi
@@ -95,6 +103,14 @@ Webapp --> LocalProxy : local same-origin request
 LocalProxy --> LocalApi
 LocalApi --> LocalComposition
 LocalComposition --> RestAdapter
+LocalComposition --> SecretProvider : configured backend
+CandidateManifest --> CandidateApi : exact image digest
+CandidateSecrets --> CandidateApi : AWS secret ARNs + runtime DB role
+CandidateSecrets --> RestoreGate : distinct backup/restore roles
+RestoreGate --> LoopDatabase : verified pre-migration archive
+CandidateApi --> LoopDatabase : private PostgreSQL network
+CandidateApi --> TodoistApi : outbound provider read
+CandidateApi ..> RestAlias : leaves active alias unchanged
 ApiGateway --> RestAlias
 RestAlias --> RestAdapter
 Alexa --> AlexaAlias : signed Alexa request

@@ -1,9 +1,11 @@
+import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
+
 import { JsonConsoleLogger } from '../adapters/observability/JsonConsoleLogger.js';
 import type { RestApiController } from '../adapters/rest/RestApiController.js';
+import { AwsSecretsManagerSecretProvider } from '../adapters/secrets/AwsSecretsManagerSecretProvider.js';
 import { FileSecretProvider } from '../adapters/secrets/FileSecretProvider.js';
 import type { OperationalLogger } from '../application/ports/OperationalLogger.js';
 import { AppConfig } from '../config/AppConfig.js';
-import { ConfigurationError } from '../domain/errors.js';
 import { RestControllerFactory } from './ApplicationFactories.js';
 
 export class LocalRestApplicationComposition {
@@ -16,10 +18,10 @@ export class LocalRestApplicationComposition {
     environment: NodeJS.ProcessEnv = process.env
   ): Promise<LocalRestApplicationComposition> {
     const config = AppConfig.fromRestEnvironment(environment);
-    if (config.secretProvider !== 'file') {
-      throw new ConfigurationError('The local REST runtime requires SECRET_PROVIDER=file.');
-    }
-    const secrets = new FileSecretProvider();
+    const secrets =
+      config.secretProvider === 'file'
+        ? new FileSecretProvider()
+        : new AwsSecretsManagerSecretProvider(new SecretsManagerClient({}));
     return new LocalRestApplicationComposition(
       await new RestControllerFactory(config, secrets).create(),
       new JsonConsoleLogger(config.logLevel)

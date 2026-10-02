@@ -2,15 +2,52 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { AwsSecretsManagerSecretProvider } from '../../src/adapters/secrets/AwsSecretsManagerSecretProvider.js';
 import { LocalRestApplicationComposition } from '../../src/bootstrap/LocalApplicationComposition.js';
 
 describe('LocalRestApplicationComposition', () => {
   const directories: string[] = [];
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true })));
+  });
+
+  it('uses Secrets Manager for an EC2 HTTP candidate without file-backed token copies', async () => {
+    const values = new Map([
+      ['arn:aws:secretsmanager:eu-west-1:account:secret:rest', 'automation-token'],
+      [
+        'arn:aws:secretsmanager:eu-west-1:account:secret:jwt',
+        Buffer.from('server-signing-key-with-at-least-32-bytes').toString('base64')
+      ]
+    ]);
+    const getSecret = vi
+      .spyOn(AwsSecretsManagerSecretProvider.prototype, 'getSecret')
+      .mockImplementation(async (reference: string): Promise<string> => {
+        const value = values.get(reference);
+        if (value === undefined) throw new Error('unexpected secret reference');
+        return value;
+      });
+
+    const application = await LocalRestApplicationComposition.create({
+      SECRET_PROVIDER: 'aws',
+      REST_API_TOKEN_SECRET_ARN: 'arn:aws:secretsmanager:eu-west-1:account:secret:rest',
+      LIFE2_JWT_SIGNING_KEY_SECRET_ARN: 'arn:aws:secretsmanager:eu-west-1:account:secret:jwt',
+      LIFE2_ALLOWED_ACCOUNT_ID: 'account-123',
+      TODOIST_TENANT_CATALOG_SECRET_ARN: 'arn:aws:secretsmanager:eu-west-1:account:secret:catalog',
+      DATABASE_URL: 'postgresql://lists:password@127.0.0.1:5432/lists_service'
+    });
+    const response = await application.restController.handle({
+      method: 'GET',
+      path: '/health',
+      headers: {},
+      query: {},
+      requestId: 'candidate-request'
+    });
+    expect(response.statusCode).toBe(200);
+    expect(getSecret).toHaveBeenCalledTimes(2);
   });
 
   it('constructs the REST application entirely from file-backed secrets', async () => {

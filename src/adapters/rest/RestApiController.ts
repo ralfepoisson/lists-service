@@ -1,4 +1,10 @@
 import type { TaskListService } from '../../application/TaskListService.js';
+import type {
+  LoopService,
+  CreateLoopInput,
+  UpdateLoopInput
+} from '../../application/LoopService.js';
+import type { Loop, RelatedRecord } from '../../domain/Loop.js';
 import type { ItemStatus } from '../../application/ports/ShoppingListRepository.js';
 import type { TenantTaskListServiceProvider } from '../../application/ports/TenantTaskListServiceProvider.js';
 import {
@@ -32,6 +38,7 @@ export class RestApiController {
   constructor(
     private readonly authenticator: RestAuthenticator,
     private readonly taskListServices: TenantTaskListServiceProvider,
+    private readonly loopService: LoopService,
     private readonly heartbeatCheck: HeartbeatCheck
   ) {}
 
@@ -115,6 +122,10 @@ export class RestApiController {
       throw new AuthorizationForbiddenError(
         'Todoist connections are managed through the server-side tenant connection catalogue.'
       );
+    }
+    if (request.path === '/v1/loops' || request.path.startsWith('/v1/loops/')) {
+      const life2Principal = this.requireLife2Principal(principal);
+      return this.routeLoops(request, life2Principal.accountId, life2Principal.sub);
     }
     if (request.path === '/api/v1/search' && request.method === 'POST') {
       const life2Principal = this.requireLife2Principal(principal);
@@ -286,11 +297,91 @@ export class RestApiController {
     throw new RouteNotFoundError();
   }
 
+  private async routeLoops(
+    request: RestRequest,
+    accountId: string,
+    sub: string
+  ): Promise<RestResponse> {
+    if (request.path === '/v1/loops' && request.method === 'GET') {
+      const status = this.parseLoopStatus(request.query['status']);
+      const loops = await this.loopService.list(accountId, status);
+      return this.success(200, loops.map((loop) => this.publicLoop(loop)), request.requestId, {
+        count: loops.length
+      });
+    }
+    if (request.path === '/v1/loops' && request.method === 'POST') {
+      return this.success(
+        201,
+        this.publicLoop(
+          await this.loopService.create(accountId, sub, this.parseCreateLoopBody(request.body))
+        ),
+        request.requestId
+      );
+    }
+
+    const loopRoute = /^\/v1\/loops\/([^/]+?)(?:\/(close))?$/u.exec(request.path);
+    if (loopRoute === null) throw new RouteNotFoundError();
+    const loopId = decodeURIComponent(loopRoute[1] as string);
+    const action = loopRoute[2];
+    if (request.method === 'GET' && action === undefined) {
+      return this.success(
+        200,
+        this.publicLoop(await this.loopService.get(accountId, loopId)),
+        request.requestId
+      );
+    }
+    if (request.method === 'PATCH' && action === undefined) {
+      return this.success(
+        200,
+        this.publicLoop(
+          await this.loopService.update(
+            accountId,
+            sub,
+            loopId,
+            this.parseUpdateLoopBody(request.body)
+          )
+        ),
+        request.requestId
+      );
+    }
+    if (request.method === 'POST' && action === 'close') {
+      return this.success(
+        200,
+        this.publicLoop(
+          await this.loopService.close(
+            accountId,
+            sub,
+            loopId,
+            this.parseCloseLoopBody(request.body)
+          )
+        ),
+        request.requestId
+      );
+    }
+    throw new RouteNotFoundError();
+  }
+
   private requireLife2Principal(
     principal: RestPrincipal
   ): Extract<RestPrincipal, { authMethod: 'life2' }> {
     if (principal.authMethod !== 'life2') throw new AuthorizationForbiddenError();
     return principal;
+  }
+
+  private publicLoop(loop: Loop): Record<string, unknown> {
+    return {
+      id: loop.id,
+      title: loop.title,
+      description: loop.description,
+      priority: loop.priority,
+      outcome: loop.outcome,
+      dueDate: loop.dueDate,
+      status: loop.status,
+      relatedRecords: loop.relatedRecords,
+      createdAt: loop.createdAt.toISOString(),
+      updatedAt: loop.updatedAt.toISOString(),
+      closedAt: loop.closedAt?.toISOString()
+    };
   }
 
   private requireTenantPrincipal(principal: RestPrincipal): RestPrincipal {
@@ -304,6 +395,151 @@ export class RestApiController {
       throw new ValidationError('status must be active, completed, or all.');
     }
     return status;
+  }
+
+  private parseLoopStatus(value: string | undefined): 'open' | 'closed' | 'all' {
+    const status = value ?? 'open';
+    if (status !== 'open' && status !== 'closed' && status !== 'all') {
+      throw new ValidationError('status must be open, closed, or all.');
+    }
+    return status;
+  }
+
+  private parseCreateLoopBody(body: string | undefined): CreateLoopInput {
+    const values = this.parseObjectBody(body);
+    this.onlyFields(values, [
+      'title',
+      'description',
+      'priority',
+      'outcome',
+      'dueDate',
+      'relatedRecords'
+    ]);
+    if (typeof values['title'] !== 'string' || typeof values['outcome'] !== 'string') {
+      throw new ValidationError('Loop creation requires string title and outcome fields.');
+    }
+    const dueDate = this.optionalString(values['dueDate'], 'dueDate');
+    const description = this.optionalString(values['description'], 'description');
+    const priority = this.optionalString(values['priority'], 'priority');
+    const relatedRecords = this.optionalRelatedRecords(values['relatedRecords']);
+    return {
+      title: values['title'],
+      outcome: values['outcome'],
+      ...(description === undefined ? {} : { description }),
+      ...(priority === undefined ? {} : { priority: priority as 'high' | 'medium' | 'low' }),
+      ...(dueDate === undefined ? {} : { dueDate }),
+      ...(relatedRecords === undefined ? {} : { relatedRecords })
+    };
+  }
+
+  private parseUpdateLoopBody(body: string | undefined): UpdateLoopInput {
+    const values = this.parseObjectBody(body);
+    this.onlyFields(values, [
+      'title',
+      'description',
+      'priority',
+      'outcome',
+      'dueDate',
+      'relatedRecords'
+    ]);
+    if (Object.keys(values).length === 0) {
+      throw new ValidationError('At least one loop field must be provided.');
+    }
+    if (values['title'] !== undefined && typeof values['title'] !== 'string') {
+      throw new ValidationError('title must be a string.');
+    }
+    if (values['outcome'] !== undefined && typeof values['outcome'] !== 'string') {
+      throw new ValidationError('outcome must be a string.');
+    }
+    if (
+      values['description'] !== undefined &&
+      values['description'] !== null &&
+      typeof values['description'] !== 'string'
+    ) {
+      throw new ValidationError('description must be a string or null.');
+    }
+    if (values['priority'] !== undefined && typeof values['priority'] !== 'string') {
+      throw new ValidationError('priority must be a string.');
+    }
+    if (
+      values['dueDate'] !== undefined &&
+      values['dueDate'] !== null &&
+      typeof values['dueDate'] !== 'string'
+    ) {
+      throw new ValidationError('dueDate must be a string or null.');
+    }
+    return {
+      ...(values['title'] === undefined ? {} : { title: values['title'] }),
+      ...(values['outcome'] === undefined ? {} : { outcome: values['outcome'] }),
+      ...(values['description'] === undefined ? {} : { description: values['description'] }),
+      ...(values['priority'] === undefined
+        ? {}
+        : { priority: values['priority'] as 'high' | 'medium' | 'low' }),
+      ...(values['dueDate'] === undefined ? {} : { dueDate: values['dueDate'] }),
+      ...(values['relatedRecords'] === undefined
+        ? {}
+        : { relatedRecords: this.requiredRelatedRecords(values['relatedRecords']) })
+    } as UpdateLoopInput;
+  }
+
+  private parseCloseLoopBody(body: string | undefined): boolean {
+    const values = this.parseObjectBody(body);
+    this.onlyFields(values, ['confirmed']);
+    if (values['confirmed'] !== true) {
+      throw new ValidationError('Closing a loop requires confirmed: true.');
+    }
+    return true;
+  }
+
+  private parseObjectBody(body: string | undefined): Record<string, unknown> {
+    if (body === undefined) throw new ValidationError('A JSON request body is required.');
+    let payload: unknown;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      throw new ValidationError('The request body must be valid JSON.');
+    }
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+      throw new ValidationError('The request body must be a JSON object.');
+    }
+    return payload as Record<string, unknown>;
+  }
+
+  private onlyFields(values: Record<string, unknown>, allowed: readonly string[]): void {
+    if (Object.keys(values).some((field) => !allowed.includes(field))) {
+      throw new ValidationError('The request body contains an unsupported field.');
+    }
+  }
+
+  private optionalString(value: unknown, name: string): string | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string') throw new ValidationError(`${name} must be a string.`);
+    return value;
+  }
+
+  private optionalRelatedRecords(value: unknown): readonly RelatedRecord[] | undefined {
+    return value === undefined ? undefined : this.requiredRelatedRecords(value);
+  }
+
+  private requiredRelatedRecords(value: unknown): readonly RelatedRecord[] {
+    if (!Array.isArray(value)) throw new ValidationError('relatedRecords must be an array.');
+    if (
+      !value.every(
+        (record) =>
+          typeof record === 'object' &&
+          record !== null &&
+          !Array.isArray(record) &&
+          Object.keys(record).every((field) => ['kind', 'recordId', 'label'].includes(field)) &&
+          typeof (record as Record<string, unknown>)['kind'] === 'string' &&
+          typeof (record as Record<string, unknown>)['recordId'] === 'string' &&
+          typeof (record as Record<string, unknown>)['label'] === 'string'
+      )
+    ) {
+      throw new ValidationError(
+        'Each related record requires only string kind, recordId, and label fields.'
+      );
+    }
+    return value as RelatedRecord[];
   }
 
   private parseAddBody(body: string | undefined): string {

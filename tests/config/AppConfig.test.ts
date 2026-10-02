@@ -11,6 +11,7 @@ describe('AppConfig', () => {
     LIFE2_ALLOWED_ACCOUNT_ID: 'account-123',
     TODOIST_TENANT_CATALOG_SECRET_ARN:
       'arn:aws:secretsmanager:eu-west-1:123456789012:secret:todoist-catalog',
+    DATABASE_URL: 'postgresql://lists:password@127.0.0.1:5432/lists_service',
     ALEXA_SKILL_ID: 'amzn1.ask.skill.test',
     LOG_LEVEL: 'info'
   };
@@ -22,6 +23,7 @@ describe('AppConfig', () => {
     expect(config.life2AllowedAccountId).toBe('account-123');
     expect(config.todoistTenantCatalogSecretArn).toContain('todoist-catalog');
     expect(config.secretProvider).toBe('aws');
+    expect(config.requiredDatabaseUrl()).toContain('/lists_service');
   });
 
   it('does not require an invented Alexa skill id for the REST runtime', () => {
@@ -75,13 +77,12 @@ describe('AppConfig', () => {
     ).toThrowError(ConfigurationError);
   });
 
-  it.each([
-    'LIFE2_JWT_SIGNING_KEY_SECRET_ARN',
-    'LIFE2_ALLOWED_ACCOUNT_ID',
-    'TODOIST_TENANT_CATALOG_SECRET_ARN'
-  ])('fails when %s is missing', (name) => {
-    expect(() =>
-      AppConfig.fromRestEnvironment({ ...completeEnvironment, [name]: undefined })
-    ).toThrowError(ConfigurationError);
-  });
+  it.each(['LIFE2_JWT_SIGNING_KEY_SECRET_ARN', 'LIFE2_ALLOWED_ACCOUNT_ID', 'DATABASE_URL'])(
+    'fails when %s is missing',
+    (name) => {
+      expect(() =>
+        AppConfig.fromRestEnvironment({ ...completeEnvironment, [name]: undefined })
+      ).toThrowError(ConfigurationError);
+    }
+  );
 });

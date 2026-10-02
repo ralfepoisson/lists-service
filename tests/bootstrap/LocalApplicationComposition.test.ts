@@ -43,6 +43,7 @@ describe('LocalRestApplicationComposition', () => {
       LIFE2_JWT_SIGNING_KEY_SECRET_ARN: signingKey,
       LIFE2_ALLOWED_ACCOUNT_ID: 'account-123',
       TODOIST_TENANT_CATALOG_SECRET_ARN: tenantCatalog,
+      DATABASE_URL: 'postgresql://lists:password@127.0.0.1:5432/lists_service',
       ALEXA_SKILL_ID: 'local-rest-only'
     });
 

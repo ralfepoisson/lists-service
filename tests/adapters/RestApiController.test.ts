@@ -10,6 +10,7 @@ import type {
   RestPrincipal
 } from '../../src/adapters/rest/RestBearerAuthenticator.js';
 import { ShoppingListService } from '../../src/application/ShoppingListService.js';
+import { LoopService } from '../../src/application/LoopService.js';
 import { TaskListService } from '../../src/application/TaskListService.js';
 import type { TodoistConnectionStatus } from '../../src/application/ports/TenantTaskListServiceProvider.js';
 import { ShoppingListPrintService } from '../../src/application/ShoppingListPrintService.js';
@@ -17,6 +18,7 @@ import { PdfKitShoppingListRenderer } from '../../src/adapters/pdf/PdfKitShoppin
 import { ShoppingListItem } from '../../src/domain/ShoppingListItem.js';
 import { InMemoryShoppingListRepository } from '../support/InMemoryShoppingListRepository.js';
 import { InMemoryTaskListRepository } from '../support/InMemoryTaskListRepository.js';
+import { InMemoryLoopRepository } from '../support/InMemoryLoopRepository.js';
 
 class FixtureAuthenticator implements RestAuthenticator {
   authenticate(header: string | undefined): RestPrincipal | undefined {
@@ -53,6 +55,11 @@ class RestControllerFixture {
   ]);
   readonly taskListRepository = new InMemoryTaskListRepository();
   readonly taskListService = new TaskListService(this.taskListRepository);
+  readonly loopService = new LoopService(
+    new InMemoryLoopRepository(),
+    () => 'loop-1',
+    () => new Date('2026-09-30T12:00:00.000Z')
+  );
   readonly requestedTenantIds: string[] = [];
   heartbeatHealthy = true;
   readonly controller = new RestApiController(
@@ -86,6 +93,7 @@ class RestControllerFixture {
         };
       }
     },
+    this.loopService,
     async () => {
       this.requestedTenantIds.push('account-123');
       return this.heartbeatHealthy && (await new ShoppingListService(this.repository).isReady());
@@ -105,6 +113,55 @@ class RestControllerFixture {
 }
 
 describe('RestApiController', () => {
+  it('creates and lists account-scoped loops only for a Life2 principal', async () => {
+    const fixture = new RestControllerFixture();
+
+    const create = await fixture.controller.handle(
+      fixture.request({
+        method: 'POST',
+        path: '/v1/loops',
+        headers: { authorization: 'Bearer life2-tenant' },
+        body: JSON.stringify({
+          title: 'Car service',
+          outcome: 'The car has been serviced.',
+          relatedRecords: [{ kind: 'task', recordId: 'task-7', label: 'Book service' }]
+        })
+      })
+    );
+    expect(create.statusCode).toBe(201);
+    expect(JSON.parse(create.body).data).toEqual({
+      id: 'loop-1',
+      title: 'Car service',
+      description: undefined,
+      priority: 'medium',
+      outcome: 'The car has been serviced.',
+      dueDate: undefined,
+      status: 'open',
+      relatedRecords: [{ kind: 'task', recordId: 'task-7', label: 'Book service' }],
+      createdAt: '2026-09-30T12:00:00.000Z',
+      updatedAt: '2026-09-30T12:00:00.000Z',
+      closedAt: undefined
+    });
+
+    const list = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/loops',
+        headers: { authorization: 'Bearer life2-tenant' }
+      })
+    );
+    expect(JSON.parse(list.body).data).toHaveLength(1);
+
+    const automation = await fixture.controller.handle(
+      fixture.request({
+        method: 'POST',
+        path: '/v1/loops',
+        headers: { authorization: 'Bearer rest-secret' },
+        body: JSON.stringify({ title: 'Nope', outcome: 'Nope' })
+      })
+    );
+    expect(automation.statusCode).toBe(403);
+  });
+
   it('serves unauthenticated liveness without checking Todoist', async () => {
     const fixture = new RestControllerFixture();
 
@@ -153,7 +210,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body)).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.8.0',
+        version: '0.9.0',
         revision: 'lists-test-revision'
       });
     } finally {

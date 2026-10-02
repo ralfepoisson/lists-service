@@ -19,7 +19,7 @@ end note
 actor "Household member" as Household
 component "Alexa custom skill\n(en-GB)" as Alexa
 component "Personal REST client" as RestClient
-component "Life2 Webapp\nShopping + Task Lists" as Webapp
+component "Life2 Webapp\nShopping + Task Lists + Loops" as Webapp
 component "Local Nginx\n/api/lists proxy" as LocalProxy
 component "Local lists-api\nNode container" as LocalApi
 
@@ -35,6 +35,7 @@ cloud "AWS" {
     component "Constant-time automation token\n+deployment-bound accountId" as StaticAuth
     component "Life2 JWT verifier\nHS256 + principal claims" as JwtAuth
     component "Task Lists authorization\nLife2 principal only" as TaskListAuth
+    component "Loops authorization\nLife2 principal only" as LoopAuth
     file "Packaged PDFKit data\nstandard fonts + colour profile" as PdfAssets
   }
 
@@ -45,9 +46,10 @@ cloud "AWS" {
   }
 
   package "Shared application package" as Application {
-    component "Shopping-list (add, edit, complete, delete)\n+ task-list use-case objects\n+ bounded workspace search" as UseCases
+    component "Shopping-list (add, edit, complete, delete)\n+ task-list and Loop use-case objects\n+ bounded workspace search" as UseCases
     component "ShoppingListPrintService\ntransient active-list snapshot" as PrintUseCase
     interface "ShoppingListRepository +\nTaskListRepository" as RepositoryPort
+    interface "LoopRepository" as LoopRepositoryPort
     interface "ShoppingListPdfRenderer" as PdfPort
   }
 
@@ -67,6 +69,7 @@ cloud "AWS" {
     component "Secret provider strategy\nAWS or read-only file" as SecretProvider
     component "Structured JSON logger" as Logger
     component "PdfKitShoppingListRenderer\nA4 attachment" as PdfRenderer
+    database "Lists PostgreSQL\nLoop rows + record references" as LoopDatabase
   }
 
   database "Secrets Manager or\nencrypted SSM" as SecretStore
@@ -99,6 +102,7 @@ RestAdapter --> AuthAdapter
 AuthAdapter --> StaticAuth
 AuthAdapter --> JwtAuth
 JwtAuth --> TaskListAuth : verified accountId
+JwtAuth --> LoopAuth : verified accountId + sub
 StaticAuth --> TenantCatalog : configured accountId
 RestAdapter --> UseCases
 RestAdapter --> UseCases : POST /api/v1/search\nLife2 principal only
@@ -113,12 +117,14 @@ UseCases --> Content
 UseCases --> Matcher
 UseCases --> DomainErrors
 UseCases --> RepositoryPort
+UseCases --> LoopRepositoryPort
 PrintUseCase --> UseCases : list active items
 PrintUseCase --> PdfPort
 PdfRenderer ..|> PdfPort
 PdfRenderer --> PdfAssets : reads at render time
 ShoppingRepository ..|> RepositoryPort
 TaskListRepository ..|> RepositoryPort
+LoopDatabase ..|> LoopRepositoryPort
 ShoppingRepository --> TodoistClient
 TaskListRepository --> TodoistClient
 ProjectResolver --> TodoistClient
@@ -127,6 +133,7 @@ TodoistClient --> TodoistApi : HTTPS
 TodoistApi --> TodoistProject
 TodoistApi --> TenantProjects
 TaskListAuth --> TenantCatalog
+LoopAuth --> LoopRepositoryPort
 TenantCatalog --> SecretProvider : tokenSecretRef
 TenantCatalog --> TaskListRepository : request-scoped token
 TenantCatalog --> ShoppingRepository : request-scoped token

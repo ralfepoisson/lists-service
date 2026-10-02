@@ -4,6 +4,7 @@ export type ApplicationErrorCode =
   | 'CONFIGURATION_ERROR'
   | 'DESTRUCTIVE_ACTION_NOT_CONFIRMED'
   | 'ITEM_NOT_FOUND'
+  | 'LOOP_NOT_FOUND'
   | 'TASK_LIST_NOT_FOUND'
   | 'TASK_NOT_FOUND'
   | 'TODOIST_NOT_CONNECTED'
@@ -34,6 +35,12 @@ export class ValidationError extends ApplicationError {
 export class ItemNotFoundError extends ApplicationError {
   constructor() {
     super('ITEM_NOT_FOUND', 'The requested shopping-list item was not found.', 404);
+  }
+}
+
+export class LoopNotFoundError extends ApplicationError {
+  constructor() {
+    super('LOOP_NOT_FOUND', 'The requested loop was not found.', 404);
   }
 }
 

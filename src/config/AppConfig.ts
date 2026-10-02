@@ -12,7 +12,8 @@ export class AppConfig {
     readonly logLevel: 'debug' | 'info' | 'warn' | 'error',
     readonly todoistApiBaseUrl: string,
     readonly completedLookbackDays: number,
-    readonly secretProvider: 'aws' | 'file'
+    readonly secretProvider: 'aws' | 'file',
+    readonly databaseUrl: string | undefined
   ) {}
 
   static fromRestEnvironment(environment: Environment): AppConfig {
@@ -27,9 +28,7 @@ export class AppConfig {
     restApiTokenSecretArn: string;
     life2JwtSigningKeySecretArn: string;
     life2AllowedAccountId: string;
-    todoistTenantCatalogSecretArn: string;
   } {
-    const tenant = this.tenantConnectionConfiguration();
     return {
       restApiTokenSecretArn: AppConfig.requireConfigured(
         this.restApiTokenSecretArn,
@@ -39,8 +38,15 @@ export class AppConfig {
         this.life2JwtSigningKeySecretArn,
         'LIFE2_JWT_SIGNING_KEY_SECRET_ARN'
       ),
-      ...tenant
+      life2AllowedAccountId: AppConfig.requireConfigured(
+        this.life2AllowedAccountId,
+        'LIFE2_ALLOWED_ACCOUNT_ID'
+      )
     };
+  }
+
+  requiredDatabaseUrl(): string {
+    return AppConfig.requireConfigured(this.databaseUrl, 'DATABASE_URL');
   }
 
   tenantConnectionConfiguration(): {
@@ -71,10 +77,10 @@ export class AppConfig {
         ? this.requireValue(environment, 'LIFE2_JWT_SIGNING_KEY_SECRET_ARN')
         : undefined;
     const life2AllowedAccountId = this.requireValue(environment, 'LIFE2_ALLOWED_ACCOUNT_ID');
-    const todoistTenantCatalogSecretArn = this.requireValue(
-      environment,
-      'TODOIST_TENANT_CATALOG_SECRET_ARN'
-    );
+    const todoistTenantCatalogSecretArn =
+      channel === 'alexa'
+        ? this.requireValue(environment, 'TODOIST_TENANT_CATALOG_SECRET_ARN')
+        : this.optionalValue(environment, 'TODOIST_TENANT_CATALOG_SECRET_ARN');
     const alexaSkillId =
       channel === 'alexa' ? this.requireValue(environment, 'ALEXA_SKILL_ID') : undefined;
     const logLevel = this.parseLogLevel(environment['LOG_LEVEL']);
@@ -82,6 +88,8 @@ export class AppConfig {
     const todoistApiBaseUrl =
       this.optionalValue(environment, 'TODOIST_API_BASE_URL') ?? 'https://api.todoist.com/api/v1';
     const secretProvider = this.parseSecretProvider(environment['SECRET_PROVIDER']);
+    const databaseUrl =
+      channel === 'rest' ? this.requireValue(environment, 'DATABASE_URL') : undefined;
 
     return new AppConfig(
       restApiTokenSecretArn,
@@ -92,7 +100,8 @@ export class AppConfig {
       logLevel,
       todoistApiBaseUrl,
       completedLookbackDays,
-      secretProvider
+      secretProvider,
+      databaseUrl
     );
   }
 

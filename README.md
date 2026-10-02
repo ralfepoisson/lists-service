@@ -4,8 +4,13 @@ Public `GET /version` publishes schema version `1`, the SemVer from
 `package.json`, and the immutable Lambda/container release revision without
 requiring Todoist access or authentication.
 
-`lists-service` is a private, tenant-scoped shopping-list and task-list service.
-Todoist is the sole system of record for list and task content. For Task Lists,
+`lists-service` is a private, tenant-scoped shopping-list, task-list, and Loop service.
+Todoist is the sole system of record for list and task content. Loops are separate
+Lists-owned PostgreSQL records: they retain the required outcome, due date, and
+opaque references to related Life2 records without copying those records or
+connecting to Plaud. An external AI agent may use Life2 MCP to create or update
+Loops after it has independently read a Plaud note; closing a Loop requires an
+explicit confirmation that the outcome happened. For Task Lists,
 each Todoist project visible through a tenant's server-managed connection is a
 named list. Task responses optionally include `priority` from 1 (highest) through
 4 (lowest). Todoist's inverse API scale is normalized at the adapter; an absent

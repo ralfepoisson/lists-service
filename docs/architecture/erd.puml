@@ -72,6 +72,29 @@ entity "Workspace search hit" as SearchHit {
   allowlisted route target
 }
 
+entity "Loop" as Loop {
+  * id : uuid
+  --
+  * accountId : Life2 tenant identifier
+  * title : varchar(160)
+  description : varchar(2000) [0..1]
+  * priority : high | medium | low
+  * outcome : varchar(2000)
+  dueDate : date [0..1]
+  * status : open | closed
+  * createdBySub, updatedBySub : Life2 user identifier
+  createdAt, updatedAt, closedAt : timestamp
+}
+
+entity "Loop related record" as LoopReference {
+  * loopId : uuid
+  * recordKind : task | appointment | email | document | entity | other
+  * recordId : opaque source identifier
+  --
+  label : source-faithful display label
+  ordinal : small integer
+}
+
 Project ||--o{ Item : contains
 Connection ..> Project : token exposes existing lists
 Connection ||--|| TenantToken : references
@@ -79,6 +102,7 @@ Configuration ..> Connection : loads catalogue
 Configuration ..> Project : selects tenant Shopping project
 Project ||..o{ SearchHit : projected on demand
 Item ||..o{ SearchHit : active tasks projected on demand
+Loop ||--o{ LoopReference : brings together record references
 
 note right of Configuration
   Stores references and identifiers only.
@@ -112,6 +136,12 @@ end note
 note bottom of SearchHit
   Search hits are transient and tenant-scoped.
   No additional database or search index is introduced.
+end note
+
+note bottom of Loop
+  Lists owns these PostgreSQL rows. Related source records remain
+  in their owning services and are never copied. A Plaud-aware agent
+  uses Life2 MCP; Lists has no direct Plaud provider dependency.
 end note
 
 StatusNote .. Item

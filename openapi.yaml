@@ -28,6 +28,8 @@ tags:
     description: Shopping-list query and mutation operations.
   - name: Task Lists
     description: Tenant-scoped Todoist projects and their ordered tasks.
+  - name: Loops
+    description: Tenant-scoped ongoing obligations owned by Lists, independent of any provider.
   - name: Workspace Search
     description: Internal normalized search provider for the Life2 workspace BFF.
   - name: Todoist Connection
@@ -345,6 +347,99 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '502': { $ref: '#/components/responses/UpstreamError' }
         '503': { $ref: '#/components/responses/UpstreamError' }
+  /v1/loops:
+    get:
+      operationId: listLoops
+      summary: List the acting tenant's Loops
+      tags: [Loops]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, closed, all], default: open }
+      responses:
+        '200':
+          description: Lists-owned Loops for the verified Life2 JWT tenant.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoopListResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createLoop
+      summary: Create a Loop
+      tags: [Loops]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateLoopRequest' }
+      responses:
+        '201':
+          description: Loop created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoopResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/loops/{loopId}:
+    parameters:
+      - $ref: '#/components/parameters/LoopId'
+    get:
+      operationId: getLoop
+      summary: Read one Loop
+      tags: [Loops]
+      responses:
+        '200':
+          description: The requested tenant-scoped Loop.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoopResponse' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: updateLoop
+      summary: Update an open Loop
+      tags: [Loops]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateLoopRequest' }
+      responses:
+        '200':
+          description: Loop updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoopResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/loops/{loopId}/close:
+    parameters:
+      - $ref: '#/components/parameters/LoopId'
+    post:
+      operationId: closeLoop
+      summary: Close a Loop after confirming its outcome happened
+      tags: [Loops]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CloseLoopRequest' }
+      responses:
+        '200':
+          description: The Loop was closed with recorded confirmation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoopResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/items:
     get:
       operationId: listItems
@@ -574,6 +669,12 @@ components:
       bearerFormat: opaque-or-Life2-JWT
       description: Account-bound opaque automation token or verified Life2 JWT.
   parameters:
+    LoopId:
+      name: loopId
+      in: path
+      required: true
+      description: Lists-owned UUID scoped to the verified Life2 tenant.
+      schema: { type: string, format: uuid }
     ListId:
       name: listId
       in: path
@@ -640,6 +741,89 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    RelatedRecord:
+      type: object
+      additionalProperties: false
+      required: [kind, recordId, label]
+      properties:
+        kind: { type: string, enum: [task, appointment, email, document, entity, other] }
+        recordId: { type: string, minLength: 1, maxLength: 256 }
+        label: { type: string, minLength: 1, maxLength: 256 }
+    Loop:
+      type: object
+      additionalProperties: false
+      required: [id, title, priority, outcome, status, relatedRecords, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 2000 }
+        priority: { type: string, enum: [high, medium, low] }
+        outcome: { type: string, minLength: 1, maxLength: 2000 }
+        dueDate: { type: string, format: date }
+        status: { type: string, enum: [open, closed] }
+        relatedRecords:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/RelatedRecord' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+    CreateLoopRequest:
+      type: object
+      additionalProperties: false
+      required: [title, outcome]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 2000 }
+        priority: { type: string, enum: [high, medium, low], default: medium }
+        outcome: { type: string, minLength: 1, maxLength: 2000 }
+        dueDate: { type: string, format: date }
+        relatedRecords:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/RelatedRecord' }
+    UpdateLoopRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 2000 }
+        priority: { type: string, enum: [high, medium, low] }
+        outcome: { type: string, minLength: 1, maxLength: 2000 }
+        dueDate: { type: string, format: date }
+        relatedRecords:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/RelatedRecord' }
+    CloseLoopRequest:
+      type: object
+      additionalProperties: false
+      required: [confirmed]
+      properties:
+        confirmed: { type: boolean, const: true }
+    LoopResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Loop' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    LoopListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Loop' }
+        meta:
+          type: object
+          additionalProperties: false
+          required: [requestId, count]
+          properties:
+            requestId: { type: string }
+            count: { type: integer, minimum: 0 }
     WorkspaceSearchRequest:
       type: object
       required: [query]

@@ -41,6 +41,17 @@ verified on 2026-07-31.
 - `DELETE /v1/task-lists/{listId}` requires destructive confirmation, closes
   every active task, and archives the project only after all closes succeed;
   Todoist Inbox is rejected because it cannot be archived.
+- `GET /v1/loops?status=open|closed|all` defaults to open and lists only the
+  verified JWT tenant's Lists-owned records. `GET /v1/loops/{loopId}` reads one
+  such record.
+- `POST /v1/loops` creates a Loop from `title`, required `outcome`, optional
+  `description`, `dueDate`, `priority` (`high|medium|low`, default `medium`),
+  and typed `relatedRecords` (`task|appointment|email|document|entity|other`).
+  `PATCH /v1/loops/{loopId}` updates an open Loop without copying any referenced
+  record.
+- `POST /v1/loops/{loopId}/close` accepts only `{ "confirmed": true }`; it
+  records the verified JWT subject and close time after the caller confirms the
+  outcome happened. Static automation receives `403` on every Loop route.
 - `POST /api/v1/search` accepts a 2-120 character `query` and `limit` from
   1-30, searches visible list names and active task content, and returns the
   normalized provider contract `{items}` for the workspace-search BFF. This
@@ -49,7 +60,7 @@ verified on 2026-07-31.
 
 Nested mutations verify task-to-project scope through the Todoist connection
 selected only by the verified Life2 JWT `accountId`. Automation authentication
-is forbidden for connection and Task Lists routes. `/v1/items*` resolves
+is forbidden for connection, Task Lists, and Loop routes. `/v1/items*` resolves
 Shopping through either the verified JWT account or the automation token's
 deployment-bound account; neither request surface accepts a caller-selected
 tenant identifier.

@@ -25,7 +25,8 @@ class LambdaBundleBuilder {
     });
     await build({
       entryPoints: {
-        'local-rest': 'src/entrypoints/local-rest.ts'
+        'local-rest': 'src/entrypoints/local-rest.ts',
+        migrate: 'src/entrypoints/migrate.ts'
       },
       bundle: true,
       format: 'cjs',
@@ -37,6 +38,7 @@ class LambdaBundleBuilder {
       minify: false
     });
     await cp('node_modules/pdfkit/js/data', 'dist/data', { recursive: true });
+    await cp('migrations', 'dist/migrations', { recursive: true });
     await mkdir('dist/rest-package', { recursive: true });
     await copyFile('dist/rest-lambda.mjs', 'dist/rest-package/rest-lambda.mjs');
     await cp('dist/data', 'dist/rest-package/data', { recursive: true });

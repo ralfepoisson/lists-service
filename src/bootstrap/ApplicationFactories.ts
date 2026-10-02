@@ -6,6 +6,8 @@ import { FetchHttpTransport } from '../adapters/todoist/FetchHttpTransport.js';
 import { PdfKitShoppingListRenderer } from '../adapters/pdf/PdfKitShoppingListRenderer.js';
 import { TimerSleeper } from '../adapters/todoist/ports/Sleeper.js';
 import { TodoistClient } from '../adapters/todoist/TodoistClient.js';
+import { PostgresLoopRepository } from '../adapters/postgres/PostgresLoopRepository.js';
+import { LoopService } from '../application/LoopService.js';
 import { TodoistProjectResolver } from '../adapters/todoist/TodoistProjectResolver.js';
 import { TodoistShoppingListRepository } from '../adapters/todoist/TodoistShoppingListRepository.js';
 import { TodoistTaskListRepository } from '../adapters/todoist/TodoistTaskListRepository.js';
@@ -19,21 +21,25 @@ import type {
   TodoistConnectionStatus
 } from '../application/ports/TenantTaskListServiceProvider.js';
 import type { AppConfig } from '../config/AppConfig.js';
+import { TodoistNotConnectedError } from '../domain/errors.js';
 
 export class TenantTaskListServiceFactory implements TenantTaskListServiceProvider {
-  private readonly catalog: TenantTodoistConnectionCatalog;
+  private readonly catalog: TenantTodoistConnectionCatalog | undefined;
 
   constructor(
     private readonly config: AppConfig,
     private readonly secrets: SecretProvider,
-    catalogSecretRef: string
+    catalogSecretRef: string | undefined
   ) {
-    this.catalog = new TenantTodoistConnectionCatalog(secrets, catalogSecretRef);
+    this.catalog =
+      catalogSecretRef === undefined
+        ? undefined
+        : new TenantTodoistConnectionCatalog(secrets, catalogSecretRef);
   }
 
   async connectionStatus(accountId: string): Promise<TodoistConnectionStatus> {
     return {
-      status: (await this.catalog.has(accountId)) ? 'connected' : 'not_connected',
+      status: (await this.requiredCatalog().has(accountId)) ? 'connected' : 'not_connected',
       canManageConnection: false
     };
   }
@@ -49,7 +55,7 @@ export class TenantTaskListServiceFactory implements TenantTaskListServiceProvid
     readonly shoppingList: ShoppingListService;
     readonly printService: ShoppingListPrintService;
   }> {
-    const connection = await this.catalog.connectionFor(accountId);
+    const connection = await this.requiredCatalog().connectionFor(accountId);
     const client = this.clientForToken(connection.token);
     const projectId =
       connection.shoppingProjectId ??
@@ -66,7 +72,7 @@ export class TenantTaskListServiceFactory implements TenantTaskListServiceProvid
   }
 
   private async clientFor(accountId: string): Promise<TodoistClient> {
-    const token = await this.catalog.tokenFor(accountId);
+    const token = await this.requiredCatalog().tokenFor(accountId);
     return this.clientForToken(token);
   }
 
@@ -79,6 +85,11 @@ export class TenantTaskListServiceFactory implements TenantTaskListServiceProvid
       maximumAttempts: 3,
       timeoutMilliseconds: 10_000
     });
+  }
+
+  private requiredCatalog(): TenantTodoistConnectionCatalog {
+    if (this.catalog === undefined) throw new TodoistNotConnectedError();
+    return this.catalog;
   }
 }
 
@@ -97,20 +108,25 @@ export class RestControllerFactory {
     const tenantServices = new TenantTaskListServiceFactory(
       this.config,
       this.secrets,
-      security.todoistTenantCatalogSecretArn
+      this.config.todoistTenantCatalogSecretArn
     );
+    const loopRepository = new PostgresLoopRepository(this.config.requiredDatabaseUrl());
     return new RestApiController(
       new CompositeRestAuthenticator([
         new RestBearerAuthenticator(restToken, security.life2AllowedAccountId),
         new Life2JwtRestAuthenticator(life2SigningKey)
       ]),
       tenantServices,
+      new LoopService(loopRepository),
       async () => {
         try {
-          const { shoppingList } = await tenantServices.shoppingForTenant(
-            security.life2AllowedAccountId
-          );
-          return await shoppingList.isReady();
+          const todoistReady =
+            this.config.todoistTenantCatalogSecretArn === undefined
+              ? true
+              : await tenantServices
+                  .shoppingForTenant(security.life2AllowedAccountId)
+                  .then(({ shoppingList }) => shoppingList.isReady());
+          return todoistReady && (await loopRepository.isReady());
         } catch {
           return false;
         }

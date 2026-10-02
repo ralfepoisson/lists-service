@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd -P)"
+if [[ "$(uname -s)" == Darwin && -x /opt/homebrew/opt/node@24/bin/node ]]; then
+  export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
+fi
+[[ "$(node -p 'process.versions.node.split(".")[0]')" == 24 && "$(npm --version | cut -d. -f1)" == 11 ]] || {
+  echo 'EC2 candidate CI requires Node 24 and npm 11' >&2; exit 69
+}
 [[ "$(git -C "$repo" branch --show-current)" == main && -z "$(git -C "$repo" status --porcelain)" ]] || {
   echo 'EC2 candidate CI requires clean local main' >&2; exit 65;
 }

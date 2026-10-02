@@ -2,8 +2,8 @@
 
 This source package prepares a **candidate only** on the existing production
 EC2 host. It never changes Route 53, the API Gateway custom domain, the REST
-Lambda `active` alias, ALB/WAF, or Apache. It has not been installed or run on
-the production host. The current canonical `lists.life-sqrd.com` origin stays
+Lambda `active` alias, ALB/WAF, or Apache. Installing host tools does not run
+the candidate or select production ingress. The canonical `lists.life-sqrd.com` origin stays
 on Lists 0.8.0 until an independently reviewed ingress handoff.
 
 ## Exact release contract
@@ -18,8 +18,8 @@ from that clean commit, tags `git-<full-sha>`, pushes to the **exact**
 `life2-lists` ECR repository, resolves its immutable digest, and writes
 `release-output/<sha>/release.json` without credentials. The manifest binds
 component, 0.9.0 version, full revision, exact digest, migration filename and
-SHA-256 of `001_loops.sql`. The production ECR repository is currently absent;
-publication fails closed until it has been reviewed and created.
+SHA-256 of `001_loops.sql`. Publication fails closed if the reviewed immutable
+ECR repository is unavailable.
 
 The host candidate helper must be separately installed from reviewed,
 root-controlled source using `deploy/ec2/install-host-tools.sh`. Installation
@@ -118,10 +118,9 @@ users. The helper rejects shell expansions, Compose interpolation characters,
 extra fields, links, open modes,
 foreign AWS regions/accounts, mismatched database names and an expiring smoke
 JWT. Files must be renewed through a private operator channel, never chat or
-logs. The production host instance role currently lacks `secretsmanager`
-permission for the Lists token catalogue and tokens; add a reviewed, narrowly
-scoped policy before candidate staging. It also needs pull rights to the new
-Lists ECR repository. The host has IMDSv2 enabled with hop limit 2; confirm
+logs. Confirm the host instance role still has narrowly scoped Secrets Manager
+reads for these Lists references and ECR pull rights for the exact repository
+before candidate staging. The host has IMDSv2 enabled with hop limit 2; confirm
 the candidate container actually resolves credentials during genuine smoke.
 
 ## Candidate sequence
@@ -183,8 +182,7 @@ canonical TLS, authenticated Todoist reads and negative authorization. Do not
 drop the Lists database, undo the additive migration, delete the verified
 backup, or retire the candidate as part of an ingress rollback.
 
-Production blockers today: no Lists ECR repository, protected EC2 secret
-permission, Lists database/roles, reviewed host-tool installation, dual-tenant
-smoke tokens, Lists ALB/Apache host route, or approved Terraform/DNS handoff.
-The canonical `/srv` filesystem had 6.9 GB free at 97% use on 2 October 2026;
-recheck capacity before storing image, backup and rollback artifacts.
+Read the latest dated implementation entries for the current release state.
+Before activation, recheck database roles, protected inputs, exact image and
+host-tool revisions, dual-tenant smoke, Lists ALB/Apache routing, Terraform/DNS
+ownership, and `/srv` capacity for image, backup, and rollback artifacts.

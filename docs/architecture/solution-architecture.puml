@@ -194,4 +194,5 @@ note right of UseCases
   allowlisted route names rather than arbitrary URLs.
 end note
 
+note "Email agents use tenant-owned Task Lists only.\nCreate/comment UUID Idempotency-Key becomes Todoist X-Request-Id.\nComments verify current task/list membership; tokens stay in Lists." as EmailDispatch
 @enduml

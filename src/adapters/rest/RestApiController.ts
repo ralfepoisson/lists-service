@@ -93,6 +93,16 @@ export class RestApiController {
     request: RestRequest,
     principal: RestPrincipal
   ): Promise<RestResponse> {
+    if (principal.authMethod === 'life2' && principal.applicationId === 'life2-email-agents') {
+      const hasDispatchScope = (principal.scope ?? '').split(/\s+/u).includes('life2:task-dispatch');
+      const allowedRead = request.method === 'GET' && (
+        request.path === '/v1/task-lists' || /^\/v1\/task-lists\/[^/]+\/tasks$/u.test(request.path)
+      );
+      const allowedWrite = request.method === 'POST' && /^\/v1\/task-lists\/[^/]+\/tasks(?:\/[^/]+\/(?:comments|complete))?$/u.test(request.path);
+      if (!hasDispatchScope || (!allowedRead && !allowedWrite)) {
+        throw new AuthorizationForbiddenError('Email agents may only use fixed task-dispatch operations.');
+      }
+    }
     if (request.method === 'GET' && request.path === '/health/ready') {
       const tenant = this.requireTenantPrincipal(principal);
       const { shoppingList } = await this.taskListServices.shoppingForTenant(tenant.accountId);
@@ -257,10 +267,20 @@ export class RestApiController {
       if (request.method === 'POST') {
         const task = await taskListService.createTask(
           listId,
-          this.parseSingleStringBody(request.body, 'content')
+          this.parseSingleStringBody(request.body, 'content'),
+          request.headers['idempotency-key']
         );
         return this.success(201, task, request.requestId);
       }
+    }
+
+    const commentRoute = /^\/v1\/task-lists\/([^/]+)\/tasks\/([^/]+)\/comments$/u.exec(request.path);
+    if (commentRoute !== null && request.method === 'POST') {
+      const comment = await taskListService.createComment(
+        decodeURIComponent(commentRoute[1] as string), decodeURIComponent(commentRoute[2] as string),
+        this.parseSingleStringBody(request.body, 'content'), request.headers['idempotency-key']
+      );
+      return this.success(201, comment, request.requestId);
     }
 
     const orderRoute = /^\/v1\/task-lists\/([^/]+)\/tasks\/order$/u.exec(request.path);

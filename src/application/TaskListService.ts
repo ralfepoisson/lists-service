@@ -3,7 +3,7 @@ import { ItemContentPolicy } from '../domain/ItemContentPolicy.js';
 import type { TaskList } from '../domain/TaskList.js';
 import { TaskListNamePolicy } from '../domain/TaskListNamePolicy.js';
 import type { TaskListTask } from '../domain/TaskListTask.js';
-import type { TaskListRepository, TaskStatus } from './ports/TaskListRepository.js';
+import type { TaskComment, TaskListRepository, TaskStatus } from './ports/TaskListRepository.js';
 
 export interface TaskListSearchHit {
   readonly kind: 'task-list' | 'task-list-task';
@@ -105,11 +105,47 @@ export class TaskListService {
     return this.repository.listTasks(this.validateId(listId, 'task list'), status);
   }
 
-  async createTask(listId: string, rawContent: string): Promise<TaskListTask> {
+  async createTask(
+    listId: string,
+    rawContent: string,
+    idempotencyKey?: string
+  ): Promise<TaskListTask> {
     return this.repository.createTask(
       this.validateId(listId, 'task list'),
-      this.contentPolicy.validate(rawContent)
+      this.contentPolicy.validate(rawContent),
+      this.validateIdempotencyKey(idempotencyKey)
     );
+  }
+
+  async createComment(
+    listId: string,
+    taskId: string,
+    rawContent: string,
+    idempotencyKey?: string
+  ): Promise<TaskComment> {
+    if (
+      typeof rawContent !== 'string' ||
+      rawContent.trim().length === 0 ||
+      rawContent.length > 15000
+    ) {
+      throw new ValidationError('Comment content must contain 1 to 15000 characters.');
+    }
+    return this.repository.createComment(
+      this.validateId(listId, 'task list'),
+      this.validateId(taskId, 'task'),
+      rawContent.trim(),
+      this.validateIdempotencyKey(idempotencyKey)
+    );
+  }
+
+  private validateIdempotencyKey(key: string | undefined): string | undefined {
+    if (
+      key !== undefined &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(key)
+    ) {
+      throw new ValidationError('Idempotency-Key must be a UUID.');
+    }
+    return key;
   }
 
   async updateTask(listId: string, taskId: string, rawContent: string): Promise<TaskListTask> {

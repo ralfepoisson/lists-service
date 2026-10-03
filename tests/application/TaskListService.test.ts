@@ -58,6 +58,14 @@ class InMemoryTaskListRepository implements TaskListRepository {
     return task;
   }
 
+  async createComment(
+    _listId: string,
+    taskId: string,
+    content: string
+  ): Promise<{ id: string; taskId: string; content: string }> {
+    return { id: 'comment-1', taskId, content };
+  }
+
   async updateTask(listId: string, taskId: string, content: string): Promise<TaskListTask> {
     return new TaskListTask(taskId, listId, content, false, 1);
   }
@@ -141,5 +149,20 @@ describe('TaskListService', () => {
     await expect(service.updateTask('list-1', 'task-1', '  Updated ')).resolves.toMatchObject({
       content: 'Updated'
     });
+  });
+  it('rejects malformed dispatch keys and empty or oversized feedback before repository calls', async () => {
+    const service = new TaskListService(new InMemoryTaskListRepository());
+    await expect(service.createTask('list-1', 'Task', 'not-uuid')).rejects.toBeInstanceOf(
+      ValidationError
+    );
+    await expect(
+      service.createComment('list-1', 'task-1', 'Feedback', 'not-uuid')
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(service.createComment('list-1', 'task-1', ' ')).rejects.toBeInstanceOf(
+      ValidationError
+    );
+    await expect(
+      service.createComment('list-1', 'task-1', 'x'.repeat(15001))
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 });

@@ -54,6 +54,14 @@ export class InMemoryTaskListRepository implements TaskListRepository {
     return task;
   }
 
+  async createComment(
+    _listId: string,
+    taskId: string,
+    content: string
+  ): Promise<{ id: string; taskId: string; content: string }> {
+    return { id: 'comment-1', taskId, content };
+  }
+
   async updateTask(listId: string, taskId: string, content: string): Promise<TaskListTask> {
     const existing = this.tasks.find((task) => task.id === taskId && task.listId === listId);
     return new TaskListTask(taskId, listId, content, false, existing?.position ?? 1);

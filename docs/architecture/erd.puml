@@ -162,4 +162,15 @@ end note
 
 StatusNote .. Item
 
+entity "Todoist Comment" as Comment {
+  * id : string <<provider identity>>
+  --
+  taskId : string
+  content : string
+}
+Item ||--o{ Comment : "task_id; provider owned"
+note right of Comment
+UUID request keys pass through to Todoist.
+No Lists-owned comment or replay table is added.
+end note
 @enduml

@@ -7,6 +7,8 @@ export type RestPrincipal =
       readonly accountId: string;
       readonly sub: string;
       readonly email: string;
+      readonly applicationId?: string;
+      readonly scope?: string;
     };
 
 export interface RestAuthenticator {

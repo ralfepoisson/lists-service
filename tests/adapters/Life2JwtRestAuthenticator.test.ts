@@ -42,6 +42,17 @@ describe('Life2JwtRestAuthenticator', () => {
     );
   });
 
+  it('preserves the verified email-agent application and scope claims', () => {
+    expect(
+      authenticator.authenticate(
+        `Bearer ${token({ applicationId: 'life2-email-agents', scope: 'life2:email-triage life2:task-dispatch' })}`
+      )
+    ).toMatchObject({
+      applicationId: 'life2-email-agents',
+      scope: 'life2:email-triage life2:task-dispatch'
+    });
+  });
+
   it.each([
     ['missing bearer', undefined],
     ['missing account', `Bearer ${token({ accountId: undefined })}`],

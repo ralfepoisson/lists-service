@@ -38,6 +38,55 @@ const createRepository = (transport: HttpTransport): TodoistTaskListRepository =
   );
 
 describe('TodoistTaskListRepository', () => {
+  it('forwards stable idempotency keys on task creation and tenant-validated comments', async () => {
+    const key = '123e4567-e89b-42d3-a456-426614174000';
+    const project = { id: 'project-1', name: 'Home', child_order: 1, inbox_project: false };
+    const task = {
+      id: 'task-1',
+      project_id: 'project-1',
+      section_id: null,
+      content: 'Task',
+      child_order: 1
+    };
+    const transport = new ScriptedTransport([
+      json(project),
+      json(task),
+      json(project),
+      json(task),
+      json({ id: 'comment-1', task_id: 'task-1', content: 'Feedback' })
+    ]);
+    const repository = createRepository(transport);
+    await repository.createTask('project-1', 'Task', key);
+    expect(transport.requests[1]?.headers['X-Request-Id']).toBe(key);
+    expect(await repository.createComment('project-1', 'task-1', 'Feedback', key)).toEqual({
+      id: 'comment-1',
+      taskId: 'task-1',
+      content: 'Feedback'
+    });
+    expect(transport.requests[4]?.headers['X-Request-Id']).toBe(key);
+    expect(JSON.parse(transport.requests[4]?.body ?? '{}')).toEqual({
+      task_id: 'task-1',
+      content: 'Feedback'
+    });
+  });
+
+  it('refuses a comment on a task outside the requested list without a provider mutation', async () => {
+    const transport = new ScriptedTransport([
+      json({ id: 'project-1', name: 'Home', child_order: 1, inbox_project: false }),
+      json({
+        id: 'task-1',
+        project_id: 'other-list',
+        section_id: null,
+        content: 'Task',
+        child_order: 1
+      })
+    ]);
+    await expect(
+      createRepository(transport).createComment('project-1', 'task-1', 'Feedback')
+    ).rejects.toBeInstanceOf(TaskNotFoundError);
+    expect(transport.requests).toHaveLength(2);
+  });
+
   it('normalizes Todoist priorities from urgent 4 to P1 and normal 1 to P4', async () => {
     const transport = new ScriptedTransport([
       json({ id: 'project-1', name: 'Home', child_order: 1, inbox_project: false }),

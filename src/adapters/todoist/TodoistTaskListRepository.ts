@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type {
+  TaskComment,
   TaskListRepository,
   TaskPosition,
   TaskStatus
@@ -76,13 +77,45 @@ export class TodoistTaskListRepository implements TaskListRepository {
     return [...active, ...completed];
   }
 
-  async createTask(listId: string, content: string): Promise<TaskListTask> {
+  async createTask(
+    listId: string,
+    content: string,
+    idempotencyKey?: string
+  ): Promise<TaskListTask> {
     await this.requireList(listId);
-    const payload = await this.client.post('/tasks', {
-      content,
-      project_id: listId
-    });
+    const payload = await this.client.post(
+      '/tasks',
+      {
+        content,
+        project_id: listId
+      },
+      idempotencyKey
+    );
     return this.mapTask(this.parseTask(payload), false, listId);
+  }
+
+  async createComment(
+    listId: string,
+    taskId: string,
+    content: string,
+    idempotencyKey?: string
+  ): Promise<TaskComment> {
+    await this.requireTask(listId, taskId);
+    const payload = await this.client.post(
+      '/comments',
+      { task_id: taskId, content },
+      idempotencyKey
+    );
+    if (
+      !this.isRecord(payload) ||
+      typeof payload['id'] !== 'string' ||
+      !payload['id'] ||
+      payload['task_id'] !== taskId ||
+      typeof payload['content'] !== 'string'
+    ) {
+      throw this.malformedResponse();
+    }
+    return { id: payload['id'], taskId, content: payload['content'] };
   }
 
   async updateTask(listId: string, taskId: string, content: string): Promise<TaskListTask> {

@@ -24,12 +24,18 @@ export class TodoistClient {
     return this.requestJson('GET', `${path}${queryString.length > 0 ? `?${queryString}` : ''}`);
   }
 
-  async post(path: string, body?: Readonly<Record<string, string>>): Promise<unknown> {
+  async post(
+    path: string,
+    body?: Readonly<Record<string, string>>,
+    idempotencyKey?: string
+  ): Promise<unknown> {
     return this.requestJson(
       'POST',
       path,
       body === undefined ? undefined : JSON.stringify(body),
-      false
+      false,
+      false,
+      idempotencyKey
     );
   }
 
@@ -46,9 +52,17 @@ export class TodoistClient {
     path: string,
     body?: string,
     allowRetry = true,
-    isForm = false
+    isForm = false,
+    idempotencyKey?: string
   ): Promise<unknown> {
-    const response = await this.sendWithPolicy(method, path, body, allowRetry, isForm);
+    const response = await this.sendWithPolicy(
+      method,
+      path,
+      body,
+      allowRetry,
+      isForm,
+      idempotencyKey
+    );
     if (response.status === 204 || response.headers.get('content-length') === '0') {
       return null;
     }
@@ -75,14 +89,15 @@ export class TodoistClient {
     path: string,
     body: string | undefined,
     allowRetry: boolean,
-    isForm = false
+    isForm = false,
+    idempotencyKey?: string
   ): Promise<Response> {
     const attempts = allowRetry ? this.options.maximumAttempts : 1;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       let response: Response;
       try {
         response = await this.options.transport.send(
-          this.createRequest(method, path, body, isForm)
+          this.createRequest(method, path, body, isForm, idempotencyKey)
         );
       } catch (error: unknown) {
         if (allowRetry && attempt < attempts) {
@@ -113,13 +128,15 @@ export class TodoistClient {
     method: 'DELETE' | 'GET' | 'POST',
     path: string,
     body: string | undefined,
-    isForm = false
+    isForm = false,
+    idempotencyKey?: string
   ): HttpRequest {
     const headers: Record<string, string> = {
       Accept: 'application/json',
       Authorization: `Bearer ${this.options.token}`,
       'User-Agent': 'Life2-Lists-Service/0.1'
     };
+    if (idempotencyKey !== undefined) headers['X-Request-Id'] = idempotencyKey;
     if (body !== undefined) {
       headers['Content-Type'] = isForm ? 'application/x-www-form-urlencoded' : 'application/json';
     }

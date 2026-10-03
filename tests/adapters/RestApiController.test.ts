@@ -22,6 +22,9 @@ import { InMemoryLoopRepository } from '../support/InMemoryLoopRepository.js';
 
 class FixtureAuthenticator implements RestAuthenticator {
   authenticate(header: string | undefined): RestPrincipal | undefined {
+    if (header === 'Bearer email-agent' || header === 'Bearer email-agent-no-scope') {
+      return { authMethod: 'life2', accountId: 'account-123', sub: 'user-123', email: 'user@example.com', applicationId: 'life2-email-agents', scope: header === 'Bearer email-agent' ? 'life2:task-dispatch' : 'life2:read' };
+    }
     if (header === 'Bearer rest-secret') {
       return { authMethod: 'automation', accountId: 'account-123' };
     }
@@ -318,7 +321,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body)).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.9.0',
+        version: '0.10.0',
         revision: 'lists-test-revision'
       });
     } finally {
@@ -589,6 +592,34 @@ describe('RestApiController', () => {
     expect(response.body).toContain('tenant-b-item');
     expect(response.body).not.toContain('milk');
     expect(fixture.requestedTenantIds).toEqual(['account-456']);
+  });
+
+  it('limits email delegations to fixed dispatch routes and requires their task scope', async () => {
+    const fixture = new RestControllerFixture();
+    for (const [method, path] of [['GET', '/v1/items'], ['DELETE', '/v1/task-lists/list-1'], ['PATCH', '/v1/task-lists/list-1/tasks/task-1'], ['GET', '/v1/tags'], ['POST', '/v1/task-lists']] as const) {
+      const response = await fixture.controller.handle(fixture.request({ method, path, headers: { authorization: 'Bearer email-agent' }, body: JSON.stringify({ content: 'Forbidden', name: 'Forbidden' }) }));
+      expect(response.statusCode).toBe(403);
+    }
+    const missingScope = await fixture.controller.handle(fixture.request({ method: 'GET', path: '/v1/task-lists', headers: { authorization: 'Bearer email-agent-no-scope' } }));
+    expect(missingScope.statusCode).toBe(403);
+    for (const path of ['/v1/task-lists', '/v1/task-lists/list-1/tasks']) {
+      const allowed = await fixture.controller.handle(fixture.request({ method: 'GET', path, headers: { authorization: 'Bearer email-agent' } }));
+      expect(allowed.statusCode).toBe(200);
+    }
+  });
+
+  it('supports tenant-authenticated feedback comments and rejects invalid dispatch keys', async () => {
+    const fixture = new RestControllerFixture();
+    const headers = { authorization: 'Bearer life2-tenant', 'idempotency-key': '123e4567-e89b-42d3-a456-426614174000' };
+    const response = await fixture.controller.handle(fixture.request({ method: 'POST', path: '/v1/task-lists/list-1/tasks/task-1/comments', headers, body: JSON.stringify({ content: 'Feedback' }) }));
+    expect(response.statusCode).toBe(201);
+    expect(JSON.parse(response.body).data).toEqual({ id: 'comment-1', taskId: 'task-1', content: 'Feedback' });
+    for (const path of ['/v1/task-lists/list-1/tasks', '/v1/task-lists/list-1/tasks/task-1/comments']) {
+      const invalid = await fixture.controller.handle(fixture.request({ method: 'POST', path, headers: { ...headers, 'idempotency-key': 'bad-key' }, body: JSON.stringify({ content: 'Feedback' }) }));
+      expect(invalid.statusCode).toBe(400);
+    }
+    const automation = await fixture.controller.handle(fixture.request({ method: 'POST', path: '/v1/task-lists/list-1/tasks/task-1/comments', headers: { authorization: 'Bearer rest-secret' }, body: JSON.stringify({ content: 'Feedback' }) }));
+    expect(automation.statusCode).toBe(403);
   });
 
   it('supports nested task create, edit, complete, delete, and list routes', async () => {

@@ -43,7 +43,11 @@ export class Life2JwtRestAuthenticator implements RestAuthenticator {
         authMethod: 'life2',
         accountId: claims['accountId'],
         sub: claims['sub'],
-        email: claims['email']
+        email: claims['email'],
+        ...(typeof claims['applicationId'] === 'string'
+          ? { applicationId: claims['applicationId'] }
+          : {}),
+        ...(typeof claims['scope'] === 'string' ? { scope: claims['scope'] } : {})
       };
     }
     return undefined;

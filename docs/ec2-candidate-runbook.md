@@ -244,3 +244,5 @@ Read the latest dated implementation entries for the current release state.
 Before activation, recheck database roles, protected inputs, exact image and
 host-tool revisions, dual-tenant smoke, Lists ALB/Apache routing, Terraform/DNS
 ownership, and `/srv` capacity for image, backup, and rollback artifacts.
+
+Production publication supports the bounded `REGISTRY_LOGIN_HOST=ssh://personal-projects` for registry authentication with an existing remote Buildx builder when the canonical developer VM cannot reach ECR. Other endpoints are rejected. Local development orchestration retains the canonical socket.

@@ -36,7 +36,15 @@ docker buildx inspect "$builder" >/dev/null 2>&1 || docker buildx create --name 
 [[ "$(docker buildx inspect "$builder" | awk -F: '$1=="Driver" {gsub(/^[[:space:]]+/, "", $2);print $2;exit}')" == docker-container ]] || {
   echo 'attesting Buildx builder required' >&2; exit 65;
 }
-aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry" >/dev/null
+login_host="${REGISTRY_LOGIN_HOST:-}"
+if [[ -n "$login_host" && "$login_host" != ssh://personal-projects ]]; then
+  echo 'registry login host must be the existing production release host' >&2; exit 65
+fi
+if [[ -n "$login_host" ]]; then
+  aws ecr get-login-password --region "$region" | docker --host "$login_host" login --username AWS --password-stdin "$registry" >/dev/null
+else
+  aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry" >/dev/null
+fi
 docker buildx build --builder "$builder" --platform linux/arm64 \
   --build-arg "LIFE2_RELEASE_REVISION=$sha" --build-arg COMPONENT_VERSION=0.10.1 \
   --provenance=true --sbom=true --push -t "$tag" "$repo"

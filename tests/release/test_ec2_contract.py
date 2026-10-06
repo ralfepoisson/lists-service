@@ -45,6 +45,22 @@ class ReleaseContractTest(unittest.TestCase):
             )
             ec2_contract.validate_manifest(manifest)
 
+    def test_upgrade_manifest_binds_every_additive_migration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            for name in ec2_contract.UPGRADE_MIGRATIONS:
+                (root / name).write_text("SELECT 1;\n")
+            manifest = ec2_contract.build_upgrade_manifest(
+                revision="a" * 40,
+                image=valid_manifest()["image"], migrations_dir=root,
+            )
+            ec2_contract.validate_manifest(manifest)
+            self.assertEqual(manifest["schemaVersion"], 2)
+            self.assertEqual(manifest["version"], "0.10.1")
+            self.assertEqual(set(manifest["migrations"]), set(ec2_contract.UPGRADE_MIGRATIONS))
+            with self.assertRaises(ValueError):
+                ec2_contract.validate_manifest(manifest | {"migrations": {"001_loops.sql": "c" * 64}})
+
     def test_manifest_requires_exact_immutable_identity(self):
         ec2_contract.validate_manifest(valid_manifest())
         for mutation in (

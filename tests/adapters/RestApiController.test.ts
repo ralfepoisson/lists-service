@@ -486,7 +486,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body)).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.10.0',
+        version: '0.10.1',
         revision: 'lists-test-revision'
       });
     } finally {

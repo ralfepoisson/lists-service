@@ -38,15 +38,15 @@ docker buildx inspect "$builder" >/dev/null 2>&1 || docker buildx create --name 
 }
 aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry" >/dev/null
 docker buildx build --builder "$builder" --platform linux/arm64 \
-  --build-arg "LIFE2_RELEASE_REVISION=$sha" --build-arg COMPONENT_VERSION=0.9.0 \
+  --build-arg "LIFE2_RELEASE_REVISION=$sha" --build-arg COMPONENT_VERSION=0.10.1 \
   --provenance=true --sbom=true --push -t "$tag" "$repo"
 digest="$(aws ecr describe-images --region "$region" --repository-name "$repository" \
   --image-ids "imageTag=git-$sha" --query 'imageDetails[0].imageDigest' --output text)"
 image="$registry/$repository@$digest"
 output="$repo/release-output/$sha"
 mkdir -p "$output"
-python3 "$repo/deploy/ec2/release_contract.py" emit-manifest "$sha" "$image" \
-  "$repo/migrations/001_loops.sql" "$output/release.json"
+python3 "$repo/deploy/ec2/release_contract.py" emit-upgrade-manifest "$sha" "$image" \
+  "$repo/migrations" "$output/release.json"
 python3 "$repo/deploy/ec2/release_contract.py" validate-manifest "$output/release.json"
 printf 'lists_candidate_published=%s\n' "$sha"
 printf 'manifest=%s\n' "$output/release.json"

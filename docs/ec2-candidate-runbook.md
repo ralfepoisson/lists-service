@@ -1,10 +1,62 @@
-# Guarded EC2 Lists 0.9.0 candidate
+# Guarded EC2 Lists release and upgrade
 
-This source package prepares a **candidate only** on the existing production
-EC2 host. It never changes Route 53, the API Gateway custom domain, the REST
+## Current 0.10.1 upgrade contract
+
+The accepted 0.9.0 service already serves the canonical origin through the
+existing EC2 Apache route. The upgrade preserves ALB, DNS, API Gateway and
+Lambda aliases. No new credentials or provider schedule is created.
+
+Publication requires the full CI gate below and a clean committed main. The
+schema-2 manifest binds version 0.10.1, immutable ARM64 image, source revision
+and the exact SHA-256 of all five migrations. The fixed host helper verifies
+image labels and each migration inside the image. It reuses the retained Lists
+bridge only after checking its Docker Compose ownership labels.
+
+Before live migration the helper creates and restore-verifies a protected
+PostgreSQL archive, compares existing Loop/reference counts and schema tables,
+then runs the candidate's migrations twice against that restored scratch database.
+The accepted three-table 0.9 schema is required. The migration ledger gains
+SHA-256 checksums and an advisory lock. Only the known original 001 checksum
+may bridge its legacy name-only ledger row; changed or unknown applied SQL
+fails closed. All later checksums must match exactly.
+
+The candidate starts on the unused fixed loopback port while the accepted 0.9
+container remains available. Two distinct genuine Auth-issued tokens must have
+more than ten minutes left at validation; mint fresh transient acceptance tokens
+through the canonical issuer into the existing protected root-only files.
+Acceptance includes actual Todoist Task Lists reads, persisted Loop create,
+update and confirmed close, comment create/read, tags read, invalid-token 401,
+foreign-tenant 404 and rejection of comments on a closed Loop. The uniquely
+labelled closed Loop remains as release evidence. Approved source Loop seeding
+is a separate identity-aware reconciliation step; the release never runs it.
+
+After candidate acceptance, the installed helper supports the explicit upgrade:
+
+```sh
+sudo /usr/local/sbin/life2-lists-candidate --activate <full-committed-sha>
+```
+
+It requires the matching root-owned candidate receipt and restored rehearsal,
+rechecks loopback identity and authenticated access, validates retained 0.9
+public and manifest identity, captures the exact current Apache site, and changes
+only its two matching fixed loopback target ports. Apache syntax must pass before
+reload. Public HTTPS must then prove exact revision, heartbeat, tenant-owned
+Loops/tags/Task Lists reads and negative authorization. Any failure restores the
+captured site and reloads Apache. Additive schema, data, backups and the retained
+0.9 container remain. A successful root-only activation receipt records both
+revisions, immutable image and selected port. Further upgrades require a new
+reviewed baseline contract.
+
+The historical initial-deployment procedure below documents the retained
+bootstrap and original ingress handoff; its empty database requirement applies
+only to schema-1/version-0.9 manifests.
+
+## Historical 0.9 bootstrap
+
+This source package prepared a **candidate only** on the existing production
+EC2 host. The initial bootstrap never changes Route 53, the API Gateway custom domain, the REST
 Lambda `active` alias, ALB/WAF, or Apache. Installing host tools does not run
-the candidate or select production ingress. The canonical `lists.life-sqrd.com` origin stays
-on Lists 0.8.0 until an independently reviewed ingress handoff.
+the candidate or select production ingress. The original canonical Lists 0.8.0 origin remained on Lambda until the separately accepted ingress handoff.
 
 ## Exact release contract
 
@@ -46,7 +98,7 @@ privilege and owns its uniquely named scratch database. `CREATEDB` is a
 cluster-level grant, so review its breadth, role separation, capacity,
 database backup retention and recovery before provisioning. The dedicated
 production Lists database and four roles were provisioned on 2026-10-03; the
-database remains empty with zero public tables and no migration. Check the
+database was initially empty; current upgrades require the accepted 0.9 schema. Check the
 dated implementation entries and inspect live state before staging.
 
 The reviewed host-tool installer also installs `database_provision.py`. Its
@@ -156,14 +208,13 @@ the candidate container actually resolves credentials during genuine smoke.
    records `candidate-validated` only if it is unchanged. It does not select
    production ingress.
 
-This package is intentionally limited to the first 0.9.0 migration into an
-empty Lists database. A later upgrade requires a separate migration checksum
-and rollback compatibility design; the current name-only migration ledger is
-not sufficient to prove the SQL already applied by a previous release.
+The original schema-1 path is limited to the first 0.9.0 migration into an empty
+Lists database. The schema-2 upgrade described above supplies migration
+checksums and an exact captured-route rollback.
 
 ## Ingress handoff and exact rollback
 
-There is **no automated ingress activation** in this candidate package. The
+The original schema-1 package had no automated ingress activation. The
 current API Gateway custom domain, A/AAAA Route 53 aliases, Lambda `active`
 alias and published 0.8.0 version are the retained rollback route. Before any
 future switch, capture the exact Route 53 A/AAAA record sets, API Gateway

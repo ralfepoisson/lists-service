@@ -15,6 +15,9 @@ ACCOUNT = "154596858576"
 REGION = "eu-west-1"
 VERSION = "0.9.0"
 MIGRATION = "001_loops.sql"
+UPGRADE_VERSION = "0.10.1"
+UPGRADE_MIGRATIONS = ("001_loops.sql", "002_lists_tags.sql", "003_loop_seed_identity.sql", "004_loop_comments.sql", "005_loop_asset_references.sql")
+UPGRADE_MANIFEST_KEYS = {"schemaVersion", "component", "version", "revision", "image", "migrations"}
 IMAGE_PREFIX = f"{ACCOUNT}.dkr.ecr.{REGION}.amazonaws.com/life2-lists@sha256:"
 MANIFEST_KEYS = {
     "schemaVersion", "component", "version", "revision", "image",
@@ -34,11 +37,13 @@ OPTIONAL_RUNTIME_ENV = {"LOG_LEVEL", "COMPLETED_LOOKBACK_DAYS", "TODOIST_API_BAS
 
 
 def validate_manifest(manifest):
-    if not isinstance(manifest, dict) or set(manifest) != MANIFEST_KEYS:
+    upgrade = isinstance(manifest, dict) and manifest.get("schemaVersion") == 2
+    keys = UPGRADE_MANIFEST_KEYS if upgrade else MANIFEST_KEYS
+    if not isinstance(manifest, dict) or set(manifest) != keys:
         raise ValueError("release manifest has unexpected fields")
-    if type(manifest["schemaVersion"]) is not int or manifest["schemaVersion"] != 1:
+    if type(manifest["schemaVersion"]) is not int or manifest["schemaVersion"] != (2 if upgrade else 1):
         raise ValueError("unsupported release manifest schema")
-    if manifest["component"] != "lists-service" or manifest["version"] != VERSION:
+    if manifest["component"] != "lists-service" or manifest["version"] != (UPGRADE_VERSION if upgrade else VERSION):
         raise ValueError("release component or version mismatch")
     if not isinstance(manifest["revision"], str) or not re.fullmatch(
         r"[0-9a-f]{40}", manifest["revision"]
@@ -48,6 +53,14 @@ def validate_manifest(manifest):
         re.escape(IMAGE_PREFIX) + r"[0-9a-f]{64}", manifest["image"]
     ):
         raise ValueError("release image must be the exact ECR digest")
+    if upgrade:
+        migrations = manifest["migrations"]
+        if not isinstance(migrations, dict) or set(migrations) != set(UPGRADE_MIGRATIONS) or any(
+            not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+            for value in migrations.values()
+        ):
+            raise ValueError("upgrade migration identities are incomplete")
+        return
     if manifest["migration"] != MIGRATION or not isinstance(
         manifest["migrationSha256"], str
     ) or not re.fullmatch(r"[0-9a-f]{64}", manifest["migrationSha256"]):
@@ -80,6 +93,17 @@ def build_manifest(*, revision, image, migration_file):
         "image": image,
         "migration": MIGRATION,
         "migrationSha256": hashlib.sha256(migration_file.read_bytes()).hexdigest(),
+    }
+    validate_manifest(manifest)
+    return manifest
+
+
+def build_upgrade_manifest(*, revision, image, migrations_dir):
+    root = pathlib.Path(migrations_dir)
+    manifest = {
+        "schemaVersion": 2, "component": "lists-service", "version": UPGRADE_VERSION,
+        "revision": revision, "image": image,
+        "migrations": {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in UPGRADE_MIGRATIONS},
     }
     validate_manifest(manifest)
     return manifest
@@ -187,6 +211,11 @@ def main():
     emit_command.add_argument("image")
     emit_command.add_argument("migration_file", type=pathlib.Path)
     emit_command.add_argument("output", type=pathlib.Path)
+    upgrade_command = subcommands.add_parser("emit-upgrade-manifest")
+    upgrade_command.add_argument("revision")
+    upgrade_command.add_argument("image")
+    upgrade_command.add_argument("migrations_dir", type=pathlib.Path)
+    upgrade_command.add_argument("output", type=pathlib.Path)
     args = parser.parse_args()
     try:
         if args.command == "validate-manifest":
@@ -196,10 +225,10 @@ def main():
             load_protected_env(args.path, args.kind)
             print("candidate_env=valid")
         else:
-            manifest = build_manifest(
-                revision=args.revision, image=args.image,
-                migration_file=args.migration_file,
-            )
+            if args.command == "emit-upgrade-manifest":
+                manifest = build_upgrade_manifest(revision=args.revision, image=args.image, migrations_dir=args.migrations_dir)
+            else:
+                manifest = build_manifest(revision=args.revision, image=args.image, migration_file=args.migration_file)
             fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as target:
                 json.dump(manifest, target, separators=(",", ":"))

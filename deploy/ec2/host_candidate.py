@@ -2,7 +2,8 @@
 """Trusted, candidate-only Lists release on the existing EC2 PostgreSQL network.
 
 This file must be installed separately as root-owned host tooling. Uploaded
-release data is never executed. It does not modify Apache, ALB, DNS or Lambda.
+release data is never executed. An accepted 0.10 upgrade may change only the
+two existing Lists Apache loopback targets; ALB, DNS and Lambda are preserved.
 """
 
 import argparse
@@ -15,7 +16,7 @@ import stat
 import subprocess
 import sys
 from datetime import datetime, timezone
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from backup_restore import perform_backup_restore
 from release_contract import ACCOUNT, IMAGE_PREFIX, REGION, load_protected_env, parse_manifest
@@ -32,11 +33,13 @@ class CandidateFailure(Exception):
     pass
 
 
-def render_compose(*, image, runtime_env, migration_env, port):
+def render_compose(*, image, runtime_env, migration_env, port, ingress_network=None):
     if not isinstance(image, str) or not re.fullmatch(
         re.escape(IMAGE_PREFIX) + r"[0-9a-f]{64}", image
     ) or port not in PORTS:
         raise ValueError("candidate image or port is invalid")
+    if ingress_network is not None and not re.fullmatch(r"life2-lists-[0-9a-f]{12}_ingress", ingress_network):
+        raise ValueError("upgrade ingress network is not component-owned")
     for candidate in (runtime_env, migration_env):
         if not isinstance(candidate, str) or not candidate.startswith(
             str(APP_ROOT / "shared") + "/"
@@ -75,9 +78,18 @@ def render_compose(*, image, runtime_env, migration_env, port):
         },
         "networks": {
             "postgresql": {"external": True, "name": "personal-projects-postgresql"},
-            "ingress": {"driver": "bridge"},
+            "ingress": {"driver": "bridge"} if ingress_network is None else {"external": True, "name": ingress_network},
         },
     }
+
+
+def render_ingress_upgrade(previous, port):
+    if not isinstance(previous, bytes) or port not in PORTS or previous.count(b"ServerName lists.life-sqrd.com") != 1:
+        raise ValueError("Lists ingress identity is invalid")
+    targets = re.findall(rb"http://127\.0\.0\.1:(4324[01])/", previous)
+    if len(targets) != 2 or targets[0] != targets[1] or int(targets[0]) == port:
+        raise ValueError("Lists ingress targets are not the accepted old route")
+    return previous.replace(b"http://127.0.0.1:" + targets[0] + b"/", ("http://127.0.0.1:" + str(port) + "/").encode())
 
 
 def _trusted_file(path, mode):
@@ -198,13 +210,27 @@ def _verify_image(manifest):
         or labels.get("org.opencontainers.image.version") != manifest["version"]
     ):
         raise CandidateFailure("candidate image identity does not match its manifest")
-    output = _run([
-        DOCKER, "run", "--rm", "--network", "none", "--entrypoint", "sha256sum",
-        image, "/app/migrations/001_loops.sql",
-    ])
-    if output.decode("ascii").split()[0] != manifest["migrationSha256"]:
-        raise CandidateFailure("candidate migration content differs from manifest")
+    migrations = manifest.get("migrations", {manifest.get("migration"): manifest.get("migrationSha256")})
+    for name, checksum in migrations.items():
+        output = _run([DOCKER, "run", "--rm", "--network", "none", "--entrypoint", "sha256sum", image, "/app/migrations/" + name])
+        if output.decode("ascii").split()[0] != checksum:
+            raise CandidateFailure("candidate migration content differs from manifest")
 
+
+
+def _retained_ingress_network():
+    from candidate_smoke import _request, _expect
+    identity = _expect(*_request("https://lists.life-sqrd.com", "/version"), 200)
+    sha = identity.get("revision")
+    if identity.get("version") != "0.9.0" or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise CandidateFailure("upgrade requires retained 0.9 public provenance")
+    project = "life2-lists-" + sha[:12]
+    name = project + "_ingress"
+    network = json.loads(_run([DOCKER, "network", "inspect", name]))[0]
+    labels = network.get("Labels", {})
+    if network.get("Name") != name or network.get("Driver") != "bridge" or network.get("Internal") is not False or labels.get("com.docker.compose.project") != project or labels.get("com.docker.compose.network") != "ingress":
+        raise CandidateFailure("retained Lists ingress ownership differs")
+    return name
 
 def stage_candidate(staged):
     _require_installed_tools()
@@ -244,10 +270,11 @@ def stage_candidate(staged):
     with manifest_copy.open("xb") as target:
         target.write(data)
     manifest_copy.chmod(0o600)
+    ingress_network = _retained_ingress_network() if manifest["schemaVersion"] == 2 else None
     compose_file = release / "compose.generated.json"
     compose_file.write_text(json.dumps(render_compose(
         image=manifest["image"], runtime_env=str(runtime),
-        migration_env=str(migration), port=port,
+        migration_env=str(migration), port=port, ingress_network=ingress_network,
     ), separators=(",", ":")), encoding="utf-8")
     compose_file.chmod(0o600)
     project = "life2-lists-" + sha[:12]
@@ -259,6 +286,16 @@ def stage_candidate(staged):
         if not backups.is_dir():
             raise CandidateFailure("protected Lists backup directory is absent")
         backup = backups / (sha + "-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + ".dump")
+        def rehearse(scratch):
+            environment = release / "restore-rehearsal.env"
+            password = quote(backup_values["PGPASSWORD_RESTORE"], safe="")
+            environment.write_text("DATABASE_URL=postgresql://" + backup_values["PGUSER_RESTORE"] + ":" + password + "@postgres:5432/" + scratch + "\n")
+            environment.chmod(0o600)
+            try:
+                _run([DOCKER, "run", "--rm", "--network", "personal-projects-postgresql", "--env-file", str(environment), manifest["image"], "node", "migrate.cjs"], timeout=180)
+                _run([DOCKER, "run", "--rm", "--network", "personal-projects-postgresql", "--env-file", str(environment), manifest["image"], "node", "migrate.cjs"], timeout=180)
+            finally:
+                environment.unlink(missing_ok=True)
         backup_result = perform_backup_restore(
             host=backup_values["PGHOST_HELPER"], port=5432,
             database=backup_values["PGDATABASE"],
@@ -267,24 +304,29 @@ def stage_candidate(staged):
             restore_user=backup_values["PGUSER_RESTORE"],
             restore_password=backup_values["PGPASSWORD_RESTORE"],
             backup_path=backup, bin_dir=pathlib.Path("/usr/bin"),
+            rehearsal=rehearse if manifest["schemaVersion"] == 2 else None,
         )
-        if backup_result["schema_table_count"] != 0 or backup_result["source_counts"] != (None, None):
-            raise CandidateFailure("initial Lists database must be empty before migration")
+        if manifest["schemaVersion"] == 1:
+            if backup_result["schema_table_count"] != 0 or backup_result["source_counts"] != (None, None):
+                raise CandidateFailure("initial Lists database must be empty before migration")
+        elif backup_result["schema_table_count"] != 3 or backup_result["source_counts"] == (None, None):
+            raise CandidateFailure("upgrade requires the retained accepted three-table 0.9 schema")
         _compose(project, compose_file, "--profile", "migration", "run", "--rm", "migrate", timeout=180)
         started = True
         _compose(project, compose_file, "up", "--detach", "--wait", "--wait-timeout", "120", "api", timeout=180)
         from candidate_smoke import run_smoke
-        run_smoke(
+        smoke = run_smoke(
             f"http://127.0.0.1:{port}", shared / "smoke-primary.jwt",
-            shared / "smoke-foreign.jwt", expected_revision=sha, expected_uid=0,
+            shared / "smoke-foreign.jwt", expected_revision=sha, expected_uid=0, expected_version=manifest["version"],
         )
         if _alias_version() != initial_alias:
             raise CandidateFailure("active Lambda alias changed during candidate validation")
         result = {
             "schemaVersion": 1, "status": "candidate-validated", "revision": sha,
-            "image": manifest["image"], "migrationSha256": manifest["migrationSha256"],
+            "image": manifest["image"], "migrations": manifest.get("migrations", {manifest.get("migration"): manifest.get("migrationSha256")}),
+            "restoreRehearsed": manifest["schemaVersion"] == 2,
             "backupSha256": backup_result["sha256"], "aliasVersion": initial_alias,
-            "port": port, "composeProject": project,
+            "port": port, "composeProject": project, "smoke": smoke,
             "validatedAt": datetime.now(timezone.utc).isoformat(),
         }
         with (release / "candidate-result.json").open("x", encoding="utf-8") as target:
@@ -300,12 +342,84 @@ def stage_candidate(staged):
         raise
 
 
+def activate_upgrade(sha):
+    _require_installed_tools()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise CandidateFailure("upgrade revision is invalid")
+    release = APP_ROOT / "releases" / sha
+    manifest_file, result_file = release / "release.json", release / "candidate-result.json"
+    _trusted_file(manifest_file, 0o600)
+    _trusted_file(result_file, 0o600)
+    manifest = parse_manifest(manifest_file.read_bytes())
+    result = json.loads(result_file.read_text())
+    if manifest["schemaVersion"] != 2 or result.get("status") != "candidate-validated" or result.get("revision") != sha or result.get("image") != manifest["image"] or result.get("restoreRehearsed") is not True:
+        raise CandidateFailure("upgrade lacks matching restored candidate acceptance")
+    port = result.get("port")
+    if port not in PORTS:
+        raise CandidateFailure("upgrade candidate port is invalid")
+    from candidate_smoke import _request, _expect, load_token
+    shared = APP_ROOT / "shared"
+    primary = load_token(shared / "smoke-primary.jwt")
+    foreign = load_token(shared / "smoke-foreign.jwt")
+    def accept(base):
+        version = _expect(*_request(base, "/version"), 200)
+        if version.get("version") != manifest["version"] or version.get("revision") != sha:
+            raise CandidateFailure("upgrade served identity differs")
+        _expect(*_request(base, "/health/heartbeat"), 200)
+        _expect(*_request(base, "/v1/loops?status=all", token=primary), 200)
+        _expect(*_request(base, "/v1/tags", token=primary), 200)
+        _expect(*_request(base, "/v1/task-lists", token=primary), 200)
+        _expect(*_request(base, "/v1/loops", token="invalid"), 401)
+        loop_id = result.get("smoke", {}).get("loopId")
+        if not isinstance(loop_id, str) or not re.fullmatch(r"[0-9a-f-]{36}", loop_id):
+            raise CandidateFailure("upgrade lacks persisted Loop evidence")
+        _expect(*_request(base, "/v1/loops/" + loop_id, token=foreign), 404)
+    accept("http://127.0.0.1:" + str(port))
+    site = pathlib.Path("/etc/apache2/sites-available/life2-lists.conf")
+    _trusted_file(site, 0o644)
+    previous = site.read_bytes()
+    before = _expect(*_request("https://lists.life-sqrd.com", "/version"), 200)
+    if before.get("version") != "0.9.0" or not isinstance(before.get("revision"), str) or not re.fullmatch(r"[0-9a-f]{40}", before["revision"]):
+        raise CandidateFailure("upgrade requires the retained accepted 0.9 public release")
+    previous_manifest = APP_ROOT / "releases" / before.get("revision", "invalid") / "release.json"
+    _trusted_file(previous_manifest, 0o600)
+    previous_identity = parse_manifest(previous_manifest.read_bytes())
+    if previous_identity["schemaVersion"] != 1 or previous_identity["revision"] != before["revision"]:
+        raise CandidateFailure("retained rollback provenance differs")
+    changed = render_ingress_upgrade(previous, port)
+    backup = release / "apache-before.conf"
+    with backup.open("xb") as out:
+        out.write(previous)
+    backup.chmod(0o600)
+    try:
+        site.write_bytes(changed)
+        _run(["/usr/sbin/apache2ctl", "configtest"])
+        _run(["/usr/bin/systemctl", "reload", "apache2"])
+        accept("https://lists.life-sqrd.com")
+        receipt = {"status": "activated", "revision": sha, "image": manifest["image"], "port": port, "previousRevision": before["revision"], "activatedAt": datetime.now(timezone.utc).isoformat()}
+        with (release / "activation.json").open("x") as out:
+            json.dump(receipt, out)
+        (release / "activation.json").chmod(0o600)
+        print("lists_upgrade=activated revision=" + sha)
+    except Exception:
+        site.write_bytes(previous)
+        _run(["/usr/sbin/apache2ctl", "configtest"])
+        _run(["/usr/bin/systemctl", "reload", "apache2"])
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("staged_manifest", type=pathlib.Path)
+    parser.add_argument("staged_manifest", type=pathlib.Path, nargs="?")
+    parser.add_argument("--activate")
     args = parser.parse_args()
     try:
-        stage_candidate(args.staged_manifest)
+        if args.activate is not None and args.staged_manifest is None:
+            activate_upgrade(args.activate)
+        elif args.staged_manifest is not None and args.activate is None:
+            stage_candidate(args.staged_manifest)
+        else:
+            raise CandidateFailure("select one release operation")
     except Exception:
         parser.exit(1, "lists_candidate=failed; active Lambda alias unchanged by this tool\n")
 

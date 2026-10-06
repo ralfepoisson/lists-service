@@ -78,7 +78,7 @@ def _public_table_count(bin_dir, *, host, port, database, user, password):
 
 def perform_backup_restore(
     *, host, port, database, backup_user, backup_password, restore_user,
-    restore_password, backup_path, bin_dir,
+    restore_password, backup_path, bin_dir, rehearsal=None,
 ):
     """Run a real dump, archive check, restore to a unique database, and row comparison."""
     if host != "127.0.0.1" or not 1 <= int(port) <= 65535:
@@ -142,6 +142,8 @@ def perform_backup_restore(
         )
         if source_tables != restored_tables:
             raise BackupRestoreError("restored Lists schema differs from the source")
+        if rehearsal is not None:
+            rehearsal(scratch)
     finally:
         if created:
             _run(

@@ -79,3 +79,28 @@ class CandidatePackageTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UpgradeIngressTest(unittest.TestCase):
+    def test_upgrade_changes_only_the_two_accepted_loopback_targets(self):
+        previous = b'ServerName lists.life-sqrd.com\nProxyPass / http://127.0.0.1:43240/\nProxyPassReverse / http://127.0.0.1:43240/\n'
+        expected = previous.replace(b':43240/', b':43241/')
+        self.assertEqual(host_candidate.render_ingress_upgrade(previous, 43241), expected)
+        for invalid in (
+            previous.replace(b'lists.life-sqrd.com', b'other.life-sqrd.com'),
+            previous.replace(b':43240/', b':8000/'),
+            previous.replace(b'ProxyPassReverse', b'other').replace(b'http://127.0.0.1:43240/', b'http://127.0.0.1:43241/', 1),
+        ):
+            with self.assertRaises(ValueError):
+                host_candidate.render_ingress_upgrade(invalid, 43241)
+
+
+class UpgradeNetworkTest(unittest.TestCase):
+    def test_upgrade_reuses_only_a_component_owned_ingress_bridge(self):
+        kwargs = dict(image=host_candidate.IMAGE_PREFIX + "a" * 64, runtime_env="/srv/apps/life2-lists/shared/runtime.env", migration_env="/srv/apps/life2-lists/shared/migration.env", port=43241)
+        name = "life2-lists-ca19aa246b9b_ingress"
+        compose = host_candidate.render_compose(**kwargs, ingress_network=name)
+        self.assertEqual(compose["networks"]["ingress"], {"external": True, "name": name})
+        for invalid in ("other_ingress", "personal-projects-postgresql", "life2-lists-x_ingress"):
+            with self.assertRaises(ValueError):
+                host_candidate.render_compose(**kwargs, ingress_network=invalid)

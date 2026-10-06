@@ -110,3 +110,12 @@ revision, authenticated Todoist reads and negative authorization. Disable the
 new ALB host rule/vhost only after the public API Gateway path has recovered.
 Do not drop Lists data, undo the additive migration, delete the verified
 archive, delete the API Gateway mapping, or retarget Lambda as a DNS rollback.
+
+## Existing EC2 service upgrades
+
+The 0.10.1 release retains the already accepted EC2/DNS/ALB ingress architecture.
+Its guarded host activation changes only the two existing Apache loopback ports,
+after restored migration rehearsal and authenticated candidate acceptance. The
+exact prior site and 0.9 image remain the rollback authority. See
+[the current release runbook](ec2-candidate-runbook.md); do not rerun the original
+Terraform DNS handoff for this upgrade.

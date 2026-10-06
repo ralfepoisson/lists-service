@@ -71,7 +71,7 @@ def _expect(status, response, expected):
     return response
 
 
-def run_smoke(base, primary_file, foreign_file, *, expected_revision, expected_uid=0):
+def run_smoke(base, primary_file, foreign_file, *, expected_revision, expected_uid=0, expected_version="0.9.0"):
     if not re.fullmatch(r"http://127\.0\.0\.1:4324[01]", base):
         raise ValueError("candidate smoke must use a fixed loopback port")
     if not re.fullmatch(r"[0-9a-f]{40}", expected_revision):
@@ -81,7 +81,7 @@ def run_smoke(base, primary_file, foreign_file, *, expected_revision, expected_u
     if primary == foreign:
         raise ValueError("candidate smoke requires separate real tenant tokens")
     version = _expect(*_request(base, "/version"), 200)
-    if version.get("version") != "0.9.0" or version.get("revision") != expected_revision:
+    if version.get("version") != expected_version or version.get("revision") != expected_revision:
         raise ValueError("candidate served version differs from image")
     _expect(*_request(base, "/health/heartbeat"), 200)
     _expect(*_request(base, "/health/ready", token=primary), 200)
@@ -108,6 +108,13 @@ def run_smoke(base, primary_file, foreign_file, *, expected_revision, expected_u
         ), 200)
         if changed.get("data", {}).get("outcome") != "Candidate tenant isolation verified":
             raise ValueError("candidate Loop update did not persist")
+        if expected_version == "0.10.1":
+            comment = _expect(*_request(base, path + "/comments", method="POST", token=primary, payload={"content": "Release comment persistence verified"}), 201)
+            if comment.get("data", {}).get("content") != "Release comment persistence verified":
+                raise ValueError("candidate comment did not persist")
+            _expect(*_request(base, path + "/comments", token=primary), 200)
+            _expect(*_request(base, path + "/comments", token=foreign), 404)
+            _expect(*_request(base, "/v1/tags", token=primary), 200)
         result = _expect(*_request(
             base, path + "/close", method="POST", token=primary,
             payload={"confirmed": True},
@@ -115,6 +122,8 @@ def run_smoke(base, primary_file, foreign_file, *, expected_revision, expected_u
         closed = result.get("data", {}).get("status") == "closed"
         if not closed:
             raise ValueError("candidate Loop close did not persist")
+        if expected_version == "0.10.1":
+            _expect(*_request(base, path + "/comments", method="POST", token=primary, payload={"content": "Closed Loop must reject this comment"}), 409)
     finally:
         if not closed:
             try:
@@ -124,4 +133,4 @@ def run_smoke(base, primary_file, foreign_file, *, expected_revision, expected_u
                 )
             except Exception:
                 pass
-    return {"candidate": "accepted", "closedLoop": True}
+    return {"candidate": "accepted", "closedLoop": True, "loopId": loop_id}

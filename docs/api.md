@@ -43,15 +43,41 @@ verified on 2026-07-31.
   Todoist Inbox is rejected because it cannot be archived.
 - `GET /v1/loops?status=open|closed|all` defaults to open and lists only the
   verified JWT tenant's Lists-owned records. `GET /v1/loops/{loopId}` reads one
-  such record.
+  such record. Migration `005_loop_asset_references.sql` widens only the existing
+  record-kind constraint; source Assets remain Master Data-owned.
 - `POST /v1/loops` creates a Loop from `title`, required `outcome`, optional
   `description`, `dueDate`, `priority` (`high|medium|low`, default `medium`),
-  and typed `relatedRecords` (`task|appointment|email|document|entity|other`).
+  and typed `relatedRecords` (`task|appointment|email|document|entity|asset|other`).
   `PATCH /v1/loops/{loopId}` updates an open Loop without copying any referenced
-  record.
+  record. Migration `005_loop_asset_references.sql` widens only the existing
+  record-kind constraint; source Assets remain Master Data-owned.
 - `POST /v1/loops/{loopId}/close` accepts only `{ "confirmed": true }`; it
   records the verified JWT subject and close time after the caller confirms the
   outcome happened. Static automation receives `403` on every Loop route.
+- `GET /v1/loops/{loopId}/comments` returns `{data: LoopComment[], meta}` in
+  append order. `POST` on the same route accepts only `{content}` with 1–4000
+  trimmed characters and returns the persisted comment with HTTP `201`.
+  A comment contains `id`, `loopId`, `content`, `authorSub`, optional
+  `authorEmail`, and ISO `createdAt`. Subject and email derive from the verified
+  Life2 principal; caller-supplied identity fields are rejected with `400`.
+  Other tenants and missing Loops receive `404`. Closed Loops remain readable,
+  but appending returns `409 LOOP_CLOSED`. Comments are Lists-owned, append-only
+  PostgreSQL records; they do not add Todoist comments or change source records.
+- `GET|POST /v1/tags` searches the authenticated tenant's separate Lists tag
+  catalogue or idempotently creates/returns a normalized tag. Query supports
+  bounded `query`, `limit` (1-100) and `offset` (0-100000).
+- `GET|POST|DELETE /v1/loops/{loopId}/tags` reads, assigns, or removes one tag
+  on a tenant-owned Loop. Assignment/removal bodies use `tagId` (DELETE uses
+  the `tagId` query parameter).
+- The same `/tags` subresource is available at
+  `/v1/task-lists/{listId}/tasks/{taskId}/tags` and `/v1/items/{itemId}/tags`.
+  Task and Shopping assignments are stored as separate Todoist provider IDs;
+  every mutation verifies the item through that tenant's live provider adapter.
+- `GET /v1/tags/{tagId}/loops|tasks|items` returns only the requested entity
+  type, hydrates current labels from the authoritative provider/service, and
+  supports bounded `limit`/`offset`; Loops accept an explicit `status` filter.
+  Stale provider references are omitted. No provider labels/completion state
+  are changed, and Finance tagging remains a separate catalogue.
 - `POST /api/v1/search` accepts a 2-120 character `query` and `limit` from
   1-30, searches visible list names and active task content, and returns the
   normalized provider contract `{items}` for the workspace-search BFF. This
@@ -155,3 +181,26 @@ uses 1 normal through 4 urgent, so Lists maps each present value to `5 - priorit
 Missing provider values remain omitted; invalid present values reject as a
 malformed upstream response. This applies to active and completed task mapping.
 Provider create/update payloads remain unchanged; no priority mutation is added.
+
+## Email-agent dispatch
+
+`POST /v1/task-lists/{listId}/tasks` accepts an optional UUID `Idempotency-Key`.
+`POST /v1/task-lists/{listId}/tasks/{taskId}/comments` accepts exactly
+`{"content":"feedback"}` (1 to 15000 characters), returning HTTP 201 with
+`data: {id, taskId, content}`. Both require the verified Life2 tenant principal;
+Shopping automation is forbidden. Lists verifies the task belongs to the list
+before comment creation. The tenant credential and provider data never leave Lists.
+
+The UUID is forwarded as Todoist `X-Request-Id`; malformed keys return 400.
+Provider mutations are not automatically retried within a request. The agent
+must retain its durable action UUID and identical payload for retry. This change
+adds no Lists database table and does not provide durable replay ownership for
+completion calls. Provider comments remain the system of record.
+
+Current primary contract sources: [Doist SDK comments](https://github.com/Doist/todoist-api-python/blob/main/todoist_api_python/api.py)
+and [Doist SDK request-id header](https://github.com/Doist/todoist-api-python/blob/main/todoist_api_python/_core/http_requests.py).
+
+Email delegations with `applicationId=life2-email-agents` additionally require
+`life2:task-dispatch`. They may only list Task Lists, read list tasks, create tasks,
+add comments, or complete tasks. Shopping, tags, list creation/deletion and task
+edit/deletion are denied even when the signature and tenant are valid.

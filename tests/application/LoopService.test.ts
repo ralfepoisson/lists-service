@@ -3,14 +3,40 @@ import { describe, expect, it } from 'vitest';
 import { LoopService } from '../../src/application/LoopService.js';
 import type { LoopRepository } from '../../src/application/ports/LoopRepository.js';
 import type { Loop, RelatedRecord } from '../../src/domain/Loop.js';
+import type { LoopComment } from '../../src/domain/LoopComment.js';
 import { ValidationError } from '../../src/domain/errors.js';
 
 class InMemoryLoopRepository implements LoopRepository {
   readonly loops: Loop[] = [];
+  readonly comments: { accountId: string; comment: LoopComment }[] = [];
+
+  async listComments(accountId: string, loopId: string): Promise<LoopComment[]> {
+    return this.comments
+      .filter((entry) => entry.accountId === accountId && entry.comment.loopId === loopId)
+      .map((entry) => entry.comment);
+  }
+
+  async addComment(accountId: string, comment: LoopComment): Promise<LoopComment> {
+    this.comments.push({ accountId, comment });
+    return comment;
+  }
 
   async create(loop: Loop): Promise<Loop> {
     this.loops.push(loop);
     return loop;
+  }
+
+  async createSeeded(
+    accountId: string,
+    seedKey: string,
+    loop: Loop
+  ): Promise<{ loop: Loop; created: boolean }> {
+    const existing = this.loops.find(
+      (candidate) => candidate.accountId === accountId && candidate.seedKey === seedKey
+    );
+    if (existing) return { loop: existing, created: false };
+    this.loops.push(loop);
+    return { loop, created: true };
   }
 
   async findById(accountId: string, id: string): Promise<Loop | undefined> {
@@ -35,6 +61,54 @@ class InMemoryLoopRepository implements LoopRepository {
 }
 
 describe('LoopService', () => {
+  it('creates and updates asset references alongside entities, documents, and tasks', async () => {
+    const service = new LoopService(new InMemoryLoopRepository(), () => 'loop-assets');
+    const relatedRecords: RelatedRecord[] = [
+      { kind: 'asset', recordId: 'asset-1', label: 'Vehicle' },
+      { kind: 'entity', recordId: 'entity-1', label: 'Garage' },
+      { kind: 'document', recordId: 'document-1', label: 'Service receipt' },
+      { kind: 'task', recordId: 'task-1', label: 'Arrange service' }
+    ];
+    const created = await service.create('tenant-a', 'user-a', {
+      title: 'Vehicle service',
+      outcome: 'Service recorded',
+      relatedRecords
+    });
+    expect(created.relatedRecords).toEqual(relatedRecords);
+    const updated = await service.update('tenant-a', 'user-a', created.id, {
+      relatedRecords: [{ kind: 'asset', recordId: 'asset-2', label: 'Replacement vehicle' }]
+    });
+    expect(updated.relatedRecords).toEqual([
+      { kind: 'asset', recordId: 'asset-2', label: 'Replacement vehicle' }
+    ]);
+    await expect(service.get('tenant-b', created.id)).rejects.toThrow('not found');
+  });
+
+  it('reconciles an approved seed key idempotently without duplicating the Loop', async () => {
+    const repository = new InMemoryLoopRepository();
+    const service = new LoopService(
+      repository,
+      () => `loop-${repository.loops.length + 1}`,
+      () => new Date('2026-10-03T00:00:00.000Z')
+    );
+    const input = {
+      seedKey: 'approved-fixture-v1',
+      title: 'Co-parenting',
+      description: 'Details',
+      outcome: 'A workable arrangement is established.',
+      relatedRecords: [
+        { kind: 'task' as const, recordId: 'todoist-123', label: 'Discuss arrangements' }
+      ]
+    };
+    const first = await service.createSeeded('tenant-1', 'user-1', input);
+    const second = await service.createSeeded('tenant-1', 'user-1', input);
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.loop.id).toBe(first.loop.id);
+    expect(repository.loops).toHaveLength(1);
+    expect(first.loop.status).toBe('open');
+    expect(first.loop.relatedRecords).toEqual(input.relatedRecords);
+  });
   it('creates an open account-scoped loop with its required outcome and record references', async () => {
     const repository = new InMemoryLoopRepository();
     const service = new LoopService(

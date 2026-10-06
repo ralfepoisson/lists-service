@@ -44,6 +44,7 @@ cloud "AWS" {
     component "Life2 JWT verifier\nHS256 + principal claims" as JwtAuth
     component "Task Lists authorization\nLife2 principal only" as TaskListAuth
     component "Loops authorization\nLife2 principal only" as LoopAuth
+    component "Lists Tags authorization\nLife2 principal only" as TagAuth
     file "Packaged PDFKit data\nstandard fonts + colour profile" as PdfAssets
   }
 
@@ -56,8 +57,10 @@ cloud "AWS" {
   package "Shared application package" as Application {
     component "Shopping-list (add, edit, complete, delete)\n+ task-list and Loop use-case objects\n+ bounded workspace search" as UseCases
     component "ShoppingListPrintService\ntransient active-list snapshot" as PrintUseCase
+    component "TagService\ntenant catalogue, assignments + exploration" as TagUseCase
     interface "ShoppingListRepository +\nTaskListRepository" as RepositoryPort
     interface "LoopRepository" as LoopRepositoryPort
+    interface "TagRepository" as TagRepositoryPort
     interface "ShoppingListPdfRenderer" as PdfPort
   }
 
@@ -77,7 +80,8 @@ cloud "AWS" {
     component "Secret provider strategy\nAWS or read-only file" as SecretProvider
     component "Structured JSON logger" as Logger
     component "PdfKitShoppingListRenderer\nA4 attachment" as PdfRenderer
-    database "Lists PostgreSQL\nLoop rows + record references" as LoopDatabase
+    database "Lists PostgreSQL\nLoop rows + profile comments + record references" as LoopDatabase
+    component "PostgresTagRepository\nnormalized names + provider identities" as TagRepositoryAdapter
   }
 
   database "Secrets Manager or\nencrypted SSM" as SecretStore
@@ -146,6 +150,14 @@ UseCases --> Matcher
 UseCases --> DomainErrors
 UseCases --> RepositoryPort
 UseCases --> LoopRepositoryPort
+LoopAuth --> UseCases : comments derive author from verified sub + email
+note right of LoopRepositoryPort
+  Profile comments remain Lists-owned and append-only.
+  Tenant ownership checked before reads and writes.
+  References include entity, asset, document, task and existing opaque kinds.
+  Asset records remain Master Data-owned.
+  Inserts lock the Loop row and reject closed status.
+end note
 PrintUseCase --> UseCases : list active items
 PrintUseCase --> PdfPort
 PdfRenderer ..|> PdfPort
@@ -162,6 +174,12 @@ TodoistApi --> TodoistProject
 TodoistApi --> TenantProjects
 TaskListAuth --> TenantCatalog
 LoopAuth --> LoopRepositoryPort
+TagAuth --> TagUseCase
+TagUseCase --> TagRepositoryPort
+TagRepositoryAdapter ..|> TagRepositoryPort
+TagRepositoryAdapter --> LoopDatabase : tenant-scoped catalogue + assignments
+TaskListAuth --> TagUseCase : validate live Todoist task/project
+TagAuth --> TenantCatalog : provider identity from verified accountId
 TenantCatalog --> SecretProvider : tokenSecretRef
 TenantCatalog --> TaskListRepository : request-scoped token
 TenantCatalog --> ShoppingRepository : request-scoped token
@@ -194,5 +212,5 @@ note right of UseCases
   allowlisted route names rather than arbitrary URLs.
 end note
 
-note "Email agents use tenant-owned Task Lists only.\nCreate/comment UUID Idempotency-Key becomes Todoist X-Request-Id.\nComments verify current task/list membership; tokens stay in Lists." as EmailDispatch
+note "Email agents call tenant-owned Task Lists only.\nCreate/comment UUID Idempotency-Key becomes Todoist X-Request-Id.\nComments verify current task/list membership; tokens stay in Lists." as EmailDispatch
 @enduml

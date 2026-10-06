@@ -23,11 +23,13 @@ The logical provider-backed data model is visualized in
 - an Alexa custom skill for voice operations; and
 - an authenticated REST API for the Life2 webapp and account-bound automations.
 
-Todoist is the sole system of record. Each verified Life2 `accountId` may have
+Todoist is the sole system of record for Shopping and Task Lists. Lists owns
+Loop metadata, opaque related-record references, and append-only profile
+comments in PostgreSQL (ADR 0007). Each verified Life2 `accountId` may have
 one entry in a protected tenant connection catalogue; the entry contains
 only a reference to that tenant's separately protected Todoist token. Every
-Todoist project visible to that token is a Task List. No application database,
-shadow list, OAuth flow, or native Alexa-list synchronization is introduced.
+Todoist project visible to that token is a Task List. No shadow list, browser
+OAuth flow, or native Alexa-list synchronization is introduced.
 
 ## Runtime structure
 
@@ -215,7 +217,12 @@ without exposing credentials.
 ## Data ownership
 
 Todoist owns project/list identity, task identity and order, content, completion
-state, and available timestamps. Lists persists no shadow copy or database. The
+state, and available timestamps. Lists persists no shadow copy of provider
+tasks. Loop comments use a tenant/Loop composite foreign key, verified subject
+and optional verified email attribution, a bounded 4000-character body, creation
+timestamp, and monotonically increasing append order. Comment insertion locks
+the Loop row before checking status so a concurrent close cannot admit a late
+write. Closed Loops retain readable comments. The
 server-side catalogue is runtime configuration containing tenant identifiers
 and secret references, not provider data or credentials. ADRs 0002 and 0005
 record these boundaries.

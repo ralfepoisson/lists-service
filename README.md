@@ -7,12 +7,27 @@ requiring Todoist access or authentication.
 `lists-service` is a private, tenant-scoped shopping-list, task-list, and Loop service.
 Todoist is the sole system of record for list and task content. Loops are separate
 Lists-owned PostgreSQL records: they retain the required outcome, due date, and
-opaque references to related Life2 records without copying those records or
+opaque references to related tasks, entities, assets, documents, and other Life2 records without copying those records or
 connecting to Plaud. An external AI agent may use Life2 MCP to create or update
 Loops after it has independently read a Plaud note; closing a Loop requires an
-explicit confirmation that the outcome happened. For Task Lists,
+explicit confirmation that the outcome happened.
+Loop profile comments are append-only Lists-owned records, attributed using
+the verified user's subject and email. They accept up to 4000 characters, are
+visible only within the Loop's tenant, and become read-only after closure.
+The `/v1/loops/{loopId}/comments` GET/POST endpoints serve the profile UI;
+record association is managed after creating the Loop. Migration 005 widens the
+existing reference-kind constraint to include `asset`; Master Data remains the
+owner of Asset content. For Task Lists,
 each Todoist project visible through a tenant's server-managed connection is a
-named list. Task responses optionally include `priority` from 1 (highest) through
+named list. Email-agent task creation accepts an optional UUID `Idempotency-Key`, forwarded
+as Todoist `X-Request-Id`. Linked-task feedback uses
+`POST /v1/task-lists/{listId}/tasks/{taskId}/comments` with `{content}` and the
+same optional key. Lists validates current task membership before mutation;
+comments remain Todoist-owned. A retry must retain its key and payload, and
+callers must retain durable action state. This boundary has unit coverage; real
+provider replay acceptance is separately required.
+
+Task responses optionally include `priority` from 1 (highest) through
 4 (lowest). Todoist's inverse API scale is normalized at the adapter; an absent
 provider value stays omitted. No priority-write controls are added. Shopping,
 Task Lists, REST automation, and Alexa all resolve a
@@ -247,10 +262,17 @@ plantuml -checkonly docs/architecture/solution-architecture.puml docs/architectu
 
 The coverage gate for Loops requires a real PostgreSQL database. On this Mac,
 `./scripts/test-postgres-integration.sh --coverage` creates and removes an
-isolated Postgres.app 18 cluster, applies `001_loops.sql` twice, and runs the
+isolated Postgres.app 18 cluster, applies the current Lists migrations twice, and runs the
 complete suite with real persistence. Set `POSTGRES_BIN_DIR` if Postgres.app is
 installed elsewhere. Plain `npm test` skips only that disposable-database spec;
 it cannot establish the Loop repository's persistence behavior.
+
+After restarting the local Lists API, `node scripts/accept-loop-comments-local.mjs`
+verifies the actual HTTP comment lifecycle through the fixed local web proxy.
+It reads the protected local signing key in memory, creates one isolated tenant
+fixture, checks persisted readback and author/tenant/closure guards, then closes
+that fixture after its recorded outcome is verified. It accepts no production
+origin and never prints keys or bearer tokens.
 
 `npm run build` creates the local REST bundle, the Alexa Lambda bundle, and a
 `dist/rest-package/` directory containing the REST Lambda plus PDFKit's

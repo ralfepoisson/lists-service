@@ -26,7 +26,8 @@ class LambdaBundleBuilder {
     await build({
       entryPoints: {
         'local-rest': 'src/entrypoints/local-rest.ts',
-        migrate: 'src/entrypoints/migrate.ts'
+        migrate: 'src/entrypoints/migrate.ts',
+        'seed-approved-open-loops': 'src/entrypoints/seed-approved-open-loops.ts'
       },
       bundle: true,
       format: 'cjs',

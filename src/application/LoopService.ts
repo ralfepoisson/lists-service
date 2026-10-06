@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import type { Loop, LoopPriority, RelatedRecord, RelatedRecordKind } from '../domain/Loop.js';
 import { Loop as LoopRecord } from '../domain/Loop.js';
-import { LoopNotFoundError, ValidationError } from '../domain/errors.js';
+import { LoopClosedError, LoopNotFoundError, ValidationError } from '../domain/errors.js';
+import type { LoopComment } from '../domain/LoopComment.js';
 import type { LoopRepository } from './ports/LoopRepository.js';
 
 export interface CreateLoopInput {
@@ -20,6 +21,15 @@ export interface UpdateLoopInput {
   readonly priority?: LoopPriority;
   readonly outcome?: string;
   readonly dueDate?: string | null;
+  readonly relatedRecords?: readonly RelatedRecord[];
+}
+
+export interface SeedLoopInput {
+  readonly seedKey: string;
+  readonly title: string;
+  readonly description: string;
+  readonly outcome: string;
+  readonly dueDate?: string;
   readonly relatedRecords?: readonly RelatedRecord[];
 }
 
@@ -53,6 +63,33 @@ export class LoopService {
         closedAt: undefined
       })
     );
+  }
+
+  async createSeeded(
+    accountId: string,
+    sub: string,
+    input: SeedLoopInput
+  ): Promise<{ loop: Loop; created: boolean }> {
+    const seedKey = this.requiredText(input.seedKey, 'seedKey', 128);
+    const now = this.clock();
+    const loop = new LoopRecord({
+      id: this.identifiers(),
+      accountId,
+      seedKey,
+      title: this.requiredText(input.title, 'title', 160),
+      description: this.optionalText(input.description, 'description', 2_000),
+      priority: 'medium',
+      outcome: this.requiredText(input.outcome, 'outcome', 2_000),
+      dueDate: this.optionalDate(input.dueDate),
+      status: 'open',
+      relatedRecords: this.relatedRecords(input.relatedRecords ?? []),
+      createdBySub: sub,
+      updatedBySub: sub,
+      createdAt: now,
+      updatedAt: now,
+      closedAt: undefined
+    });
+    return this.repository.createSeeded(accountId, seedKey, loop);
   }
 
   async list(accountId: string, status: 'open' | 'closed' | 'all'): Promise<Loop[]> {
@@ -103,6 +140,31 @@ export class LoopService {
         updatedAt: this.clock()
       })
     );
+  }
+
+  async listComments(accountId: string, id: string): Promise<LoopComment[]> {
+    await this.get(accountId, id);
+    return this.repository.listComments(accountId, id);
+  }
+
+  async addComment(
+    accountId: string,
+    sub: string,
+    id: string,
+    content: string,
+    authorEmail?: string
+  ): Promise<LoopComment> {
+    const validatedContent = this.requiredText(content, 'content', 4_000);
+    const loop = await this.get(accountId, id);
+    if (loop.status === 'closed') throw new LoopClosedError();
+    return this.repository.addComment(accountId, {
+      id: this.identifiers(),
+      loopId: id,
+      content: validatedContent,
+      authorSub: sub,
+      ...(authorEmail === undefined ? {} : { authorEmail }),
+      createdAt: this.clock()
+    });
   }
 
   async close(accountId: string, sub: string, id: string, confirmed: boolean): Promise<Loop> {
@@ -171,7 +233,7 @@ export class LoopService {
     return records.map((record) => {
       if (!this.isRelatedRecordKind(record.kind)) {
         throw new ValidationError(
-          'relatedRecords.kind must be task, appointment, email, document, entity, or other.'
+          'relatedRecords.kind must be task, appointment, email, document, entity, asset, or other.'
         );
       }
       const recordId = this.requiredText(record.recordId, 'relatedRecords.recordId', 256);
@@ -185,6 +247,6 @@ export class LoopService {
   }
 
   private isRelatedRecordKind(value: string): value is RelatedRecordKind {
-    return ['task', 'appointment', 'email', 'document', 'entity', 'other'].includes(value);
+    return ['task', 'appointment', 'email', 'document', 'entity', 'asset', 'other'].includes(value);
   }
 }

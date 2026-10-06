@@ -7,6 +7,8 @@ import { PdfKitShoppingListRenderer } from '../adapters/pdf/PdfKitShoppingListRe
 import { TimerSleeper } from '../adapters/todoist/ports/Sleeper.js';
 import { TodoistClient } from '../adapters/todoist/TodoistClient.js';
 import { PostgresLoopRepository } from '../adapters/postgres/PostgresLoopRepository.js';
+import { PostgresTagRepository } from '../adapters/postgres/PostgresTagRepository.js';
+import { TagService } from '../application/TagService.js';
 import { LoopService } from '../application/LoopService.js';
 import { TodoistProjectResolver } from '../adapters/todoist/TodoistProjectResolver.js';
 import { TodoistShoppingListRepository } from '../adapters/todoist/TodoistShoppingListRepository.js';
@@ -111,6 +113,7 @@ export class RestControllerFactory {
       this.config.todoistTenantCatalogSecretArn
     );
     const loopRepository = new PostgresLoopRepository(this.config.requiredDatabaseUrl());
+    const tagRepository = new PostgresTagRepository(this.config.requiredDatabaseUrl());
     return new RestApiController(
       new CompositeRestAuthenticator([
         new RestBearerAuthenticator(restToken, security.life2AllowedAccountId),
@@ -118,6 +121,7 @@ export class RestControllerFactory {
       ]),
       tenantServices,
       new LoopService(loopRepository),
+      new TagService(tagRepository),
       async () => {
         try {
           const todoistReady =

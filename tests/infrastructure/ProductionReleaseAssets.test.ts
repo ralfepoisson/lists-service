@@ -5,6 +5,16 @@ import { describe, expect, it } from 'vitest';
 const read = (path: string): string => readFileSync(path, 'utf8');
 
 describe('production release assets', () => {
+  it('keeps the approved Loop seed tool in the local-only image target', () => {
+    const dockerfile = read('Dockerfile');
+    const compose = read('../compose.yaml');
+
+    expect(dockerfile).toContain('FROM runtime AS local-development');
+    expect(dockerfile).toContain('/app/dist/seed-approved-open-loops.cjs');
+    expect(dockerfile.trimEnd().endsWith('FROM runtime AS production')).toBe(true);
+    expect(compose).toMatch(/lists-api:[\s\S]*?target: local-development/);
+  });
+
   it('uses a remote lockable backend and publishes immutable Lambda candidates', () => {
     const versions = read('terraform/versions.tf');
     const main = read('terraform/main.tf');

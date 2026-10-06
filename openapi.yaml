@@ -30,6 +30,8 @@ tags:
     description: Tenant-scoped Todoist projects and their ordered tasks.
   - name: Loops
     description: Tenant-scoped ongoing obligations owned by Lists, independent of any provider.
+  - name: Tags
+    description: Lists-owned tenant tag catalogue, independent from Finance tags.
   - name: Workspace Search
     description: Internal normalized search provider for the Life2 workspace BFF.
   - name: Todoist Connection
@@ -249,6 +251,12 @@ paths:
         '503': { $ref: '#/components/responses/UpstreamError' }
     post:
       operationId: createTaskListTask
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, format: uuid }
+          description: Stable action UUID forwarded as Todoist X-Request-Id.
       summary: Add a task to one named list
       tags: [Task Lists]
       requestBody:
@@ -262,6 +270,38 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TaskListTaskResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamError' }
+  /v1/task-lists/{listId}/tasks/{taskId}/comments:
+    parameters:
+      - $ref: '#/components/parameters/ListId'
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      operationId: createTaskComment
+      summary: Add feedback to a tenant-visible task in the named list
+      tags: [Task Lists]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, format: uuid }
+          description: Stable action UUID forwarded as Todoist X-Request-Id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [content]
+              properties:
+                content: { type: string, minLength: 1, maxLength: 15000 }
+      responses:
+        '201':
+          description: Comment created; envelope data contains id, taskId and content.
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -383,6 +423,280 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/tags:
+    get:
+      operationId: listTags
+      summary: Search the tenant's Lists tag catalogue
+      tags: [Tags]
+      parameters:
+        - { name: query, in: query, schema: { type: string, maxLength: 100 } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+          }
+        - {
+            name: offset,
+            in: query,
+            schema: { type: integer, minimum: 0, maximum: 100000, default: 0 }
+          }
+      responses:
+        '200':
+          {
+            description: Tenant-owned tags.,
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/TagListResponse' } } }
+          }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createTag
+      summary: Create or reuse a normalized tenant tag
+      tags: [Tags]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateTagRequest' } } }
+      responses:
+        '201':
+          {
+            description: Created or equivalent existing tag.,
+            content: { application/json: { schema: { $ref: '#/components/schemas/TagResponse' } } }
+          }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/loops/{loopId}/tags:
+    parameters: [{ $ref: '#/components/parameters/LoopId' }]
+    get:
+      operationId: listLoopTags
+      tags: [Tags]
+      responses:
+        '200':
+          {
+            description: Tags assigned to the tenant Loop.,
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/TagListResponse' } } }
+          }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: assignLoopTag
+      tags: [Tags]
+      requestBody:
+        {
+          required: true,
+          content:
+            { application/json: { schema: { $ref: '#/components/schemas/TagAssignmentRequest' } } }
+        }
+      responses:
+        '200':
+          {
+            description: Current Loop assignments.,
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/TagListResponse' } } }
+          }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: removeLoopTag
+      tags: [Tags]
+      parameters:
+        [{ name: tagId, in: query, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          {
+            description: Current Loop assignments after removal.,
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/TagListResponse' } } }
+          }
+  /v1/task-lists/{listId}/tasks/{taskId}/tags:
+    parameters:
+      - { $ref: '#/components/parameters/ListId' }
+      - { $ref: '#/components/parameters/TaskId' }
+    get:
+      {
+        operationId: listTaskTags,
+        tags: [Tags],
+        responses:
+          {
+            '200':
+              {
+                description: Current task tag assignments.,
+                content:
+                  { application/json: { schema: { $ref: '#/components/schemas/TagListResponse' } } }
+              }
+          }
+      }
+    post:
+      {
+        operationId: assignTaskTag,
+        tags: [Tags],
+        requestBody:
+          {
+            required: true,
+            content:
+              {
+                application/json: { schema: { $ref: '#/components/schemas/TagAssignmentRequest' } }
+              }
+          },
+        responses:
+          {
+            '200':
+              {
+                description: Current task tag assignments.,
+                content:
+                  { application/json: { schema: { $ref: '#/components/schemas/TagListResponse' } } }
+              },
+            '400': { $ref: '#/components/responses/ValidationError' }
+          }
+      }
+    delete:
+      {
+        operationId: removeTaskTag,
+        tags: [Tags],
+        parameters:
+          [{ name: tagId, in: query, required: true, schema: { type: string, format: uuid } }],
+        responses:
+          {
+            '200':
+              {
+                description: Current task tag assignments.,
+                content:
+                  { application/json: { schema: { $ref: '#/components/schemas/TagListResponse' } } }
+              }
+          }
+      }
+  /v1/items/{itemId}/tags:
+    parameters: [{ $ref: '#/components/parameters/ItemId' }]
+    get:
+      {
+        operationId: listItemTags,
+        tags: [Tags],
+        responses:
+          {
+            '200':
+              {
+                description: Current item tag assignments.,
+                content:
+                  { application/json: { schema: { $ref: '#/components/schemas/TagListResponse' } } }
+              }
+          }
+      }
+    post:
+      {
+        operationId: assignItemTag,
+        tags: [Tags],
+        requestBody:
+          {
+            required: true,
+            content:
+              {
+                application/json: { schema: { $ref: '#/components/schemas/TagAssignmentRequest' } }
+              }
+          },
+        responses:
+          {
+            '200':
+              {
+                description: Current item tag assignments.,
+                content:
+                  { application/json: { schema: { $ref: '#/components/schemas/TagListResponse' } } }
+              },
+            '400': { $ref: '#/components/responses/ValidationError' }
+          }
+      }
+    delete:
+      {
+        operationId: removeItemTag,
+        tags: [Tags],
+        parameters:
+          [{ name: tagId, in: query, required: true, schema: { type: string, format: uuid } }],
+        responses:
+          {
+            '200':
+              {
+                description: Current item tag assignments.,
+                content:
+                  { application/json: { schema: { $ref: '#/components/schemas/TagListResponse' } } }
+              }
+          }
+      }
+  /v1/tags/{tagId}/loops:
+    get:
+      {
+        operationId: exploreTaggedLoops,
+        tags: [Tags],
+        parameters:
+          [
+            { name: tagId, in: path, required: true, schema: { type: string, format: uuid } },
+            {
+              name: status,
+              in: query,
+              schema: { type: string, enum: [open, closed, all], default: open }
+            },
+            { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } },
+            { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 100000 } }
+          ],
+        responses:
+          {
+            '200':
+              {
+                description: Current tenant Loops assigned the tag.,
+                content:
+                  {
+                    application/json:
+                      { schema: { $ref: '#/components/schemas/TaggedResultsResponse' } }
+                  }
+              }
+          }
+      }
+  /v1/tags/{tagId}/tasks:
+    get:
+      {
+        operationId: exploreTaggedTasks,
+        tags: [Tags],
+        parameters:
+          [
+            { name: tagId, in: path, required: true, schema: { type: string, format: uuid } },
+            { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } },
+            { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 100000 } }
+          ],
+        responses:
+          {
+            '200':
+              {
+                description: Current Todoist tasks assigned the tag.,
+                content:
+                  {
+                    application/json:
+                      { schema: { $ref: '#/components/schemas/TaggedResultsResponse' } }
+                  }
+              }
+          }
+      }
+  /v1/tags/{tagId}/items:
+    get:
+      {
+        operationId: exploreTaggedItems,
+        tags: [Tags],
+        parameters:
+          [
+            { name: tagId, in: path, required: true, schema: { type: string, format: uuid } },
+            { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } },
+            { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 100000 } }
+          ],
+        responses:
+          {
+            '200':
+              {
+                description: Current Todoist Shopping items assigned the tag.,
+                content:
+                  {
+                    application/json:
+                      { schema: { $ref: '#/components/schemas/TaggedResultsResponse' } }
+                  }
+              }
+          }
+      }
   /v1/loops/{loopId}:
     parameters:
       - $ref: '#/components/parameters/LoopId'
@@ -418,6 +732,47 @@ paths:
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/loops/{loopId}/comments:
+    parameters:
+      - $ref: '#/components/parameters/LoopId'
+    get:
+      operationId: listLoopComments
+      summary: Read the tenant Loop's profile comments in append order
+      tags: [Loops]
+      responses:
+        '200':
+          description: Persisted comments, including comments on a closed Loop.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoopCommentListResponse' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: addLoopComment
+      summary: Append a comment to an open tenant Loop
+      tags: [Loops]
+      description: Author subject and email come only from the verified Life2 JWT; supplied attribution and tenant fields are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateLoopCommentRequest' }
+      responses:
+        '201':
+          description: The persisted comment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoopCommentResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: LOOP_CLOSED; closed Loops cannot receive comments.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
   /v1/loops/{loopId}/close:
     parameters:
       - $ref: '#/components/parameters/LoopId'
@@ -741,12 +1096,53 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    Tag:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 64 }
+    CreateTagRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+    TagAssignmentRequest:
+      type: object
+      additionalProperties: false
+      required: [tagId]
+      properties:
+        tagId: { type: string, format: uuid }
+    TagListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Tag' } }
+        meta: { $ref: '#/components/schemas/Meta' }
+    TaggedResult:
+      type: object
+      required: [kind, id, label]
+      properties:
+        kind: { type: string, enum: [loop, task, item] }
+        id: { type: string }
+        listId: { type: string }
+        label: { type: string }
+        status: { type: string, enum: [open, closed] }
+        isCompleted: { type: boolean }
+    TaggedResultsResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/TaggedResult' } }
+        meta: { $ref: '#/components/schemas/Meta' }
     RelatedRecord:
       type: object
       additionalProperties: false
       required: [kind, recordId, label]
       properties:
-        kind: { type: string, enum: [task, appointment, email, document, entity, other] }
+        kind: { type: string, enum: [task, appointment, email, document, entity, asset, other] }
         recordId: { type: string, minLength: 1, maxLength: 256 }
         label: { type: string, minLength: 1, maxLength: 256 }
     Loop:
@@ -768,6 +1164,40 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         closedAt: { type: string, format: date-time }
+    LoopComment:
+      type: object
+      additionalProperties: false
+      required: [id, loopId, content, authorSub, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        loopId: { type: string, format: uuid }
+        content: { type: string, minLength: 1, maxLength: 4000 }
+        authorSub: { type: string, description: Immutable verified Life2 subject. }
+        authorEmail:
+          { type: string, format: email, description: Verified author email when available. }
+        createdAt: { type: string, format: date-time }
+    CreateLoopCommentRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 4000 }
+    LoopCommentResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/LoopComment' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    LoopCommentListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/LoopComment' }
+        meta: { $ref: '#/components/schemas/Meta' }
     CreateLoopRequest:
       type: object
       additionalProperties: false
@@ -1191,6 +1621,8 @@ components:
                 - DESTRUCTIVE_ACTION_NOT_CONFIRMED
                 - INTERNAL_ERROR
                 - ITEM_NOT_FOUND
+                - LOOP_NOT_FOUND
+                - LOOP_CLOSED
                 - TASK_LIST_NOT_FOUND
                 - TASK_NOT_FOUND
                 - ROUTE_NOT_FOUND

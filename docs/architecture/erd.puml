@@ -87,13 +87,43 @@ entity "Loop" as Loop {
   createdAt, updatedAt, closedAt : timestamp
 }
 
+entity "Loop profile comment" as LoopComment {
+  * id : uuid
+  --
+  * accountId : verified Life2 tenant
+  * loopId : uuid
+  * content : varchar(4000)
+  * authorSub : verified Life2 subject
+  authorEmail : verified email [0..1]
+  * createdAt : timestamptz
+  * ordinal : identity bigint
+}
+
 entity "Loop related record" as LoopReference {
   * loopId : uuid
-  * recordKind : task | appointment | email | document | entity | other
+  * recordKind : task | appointment | email | document | entity | asset | other
   * recordId : opaque source identifier
   --
   label : source-faithful display label
   ordinal : small integer
+}
+
+entity "Lists tag catalogue" as Tag {
+  * id : uuid
+  * accountId : Life2 tenant identifier
+  * normalizedName : varchar(64) <<tenant unique>>
+  --
+  * name : varchar(64)
+  createdAt : timestamp
+}
+
+entity "Lists tag assignment" as TagAssignment {
+  * accountId : Life2 tenant identifier
+  * tagId : uuid
+  * entityKind : loop | task | item
+  * provider : lists | todoist
+  * listId : provider project identifier [empty except task]
+  * entityId : provider or Loop identifier
 }
 
 entity "Lists schema migration" as Migration {
@@ -110,7 +140,13 @@ Configuration ..> Project : selects tenant Shopping project
 Project ||..o{ SearchHit : projected on demand
 Item ||..o{ SearchHit : active tasks projected on demand
 Loop ||--o{ LoopReference : brings together record references
+Loop ||--o{ LoopComment : tenant + Loop composite FK; append only
+Migration ..> LoopComment : 004_loop_comments.sql creates
+Tag ||--o{ TagAssignment : classifies
+Loop ||..o{ TagAssignment : Lists-owned UUID
+Item ||..o{ TagAssignment : tenant + Todoist task identity
 Migration ..> Loop : 001_loops.sql creates
+Migration ..> LoopReference : 005 widens asset-kind CHECK; no source copy
 
 note right of Configuration
   Stores references and identifiers only.
@@ -150,6 +186,13 @@ note bottom of Loop
   Lists owns these PostgreSQL rows. Related source records remain
   in their owning services and are never copied. A Plaud-aware agent
   uses Life2 MCP; Lists has no direct Plaud provider dependency.
+end note
+
+note bottom of TagAssignment
+  Provider-backed task/item records remain in Todoist. The assignment stores
+  only tenant, provider, project/list and stable item identity. Every write
+  resolves the live entity through the acting tenant's provider adapter.
+  Lists tags are separate from Finance tags, even for matching visible names.
 end note
 
 note bottom of Migration

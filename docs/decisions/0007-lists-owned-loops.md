@@ -9,7 +9,7 @@ acceptance remain pending.
 ## Context
 
 An ongoing obligation can outlive any one task. It needs an outcome required for
-closure and references to related Tasks, appointments, emails, documents, and
+closure and references to related tasks, entities, assets, appointments, emails, documents, and
 other records. An external AI agent may independently read Plaud notes, but
 Life2 must not hold a Plaud credential or call Plaud directly.
 

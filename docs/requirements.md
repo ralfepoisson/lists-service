@@ -68,6 +68,14 @@ CloudWatch works in reality.
 
 ## Loops
 
+LST-LOOP-005: The profile supports tenant-scoped append-only comments (1–4000
+trimmed characters) with verified author attribution and timestamp. Closed
+Loops remain readable and reject new comments, including concurrent closure.
+Evidence: LoopComments application tests, REST controller attribution and
+ownership tests, and real PostgresLoopRepository integration tests across
+connections with a concurrent row-lock closure case; migration 004, OpenAPI,
+and both PlantUML diagrams. Production release remains separate.
+
 | ID           | Requirement                                                                                                                                                                                          | Acceptance evidence                                                                             |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | LST-LOOP-001 | Persist tenant-scoped Loops with title, optional description, high/medium/low priority, required close outcome, optional due date, status, provenance, and ordered opaque related-record references. | Migration, domain/application tests, ERD, and real database read-back after approved migration. |

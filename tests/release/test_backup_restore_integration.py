@@ -36,7 +36,8 @@ class RealPostgresBackupRestoreTest(unittest.TestCase):
             )
             self.assertEqual(result["source_counts"], result["restored_counts"])
             self.assertEqual(len(result["source_counts"]), 2)
-            self.assertEqual(result["schema_table_count"], 3)
+            # Migrations 001–004 include tags, assignments, and profile comments.
+            self.assertEqual(result["schema_table_count"], 6)
             self.assertTrue(backup.read_bytes().startswith(b"PGDMP"))
             self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
 

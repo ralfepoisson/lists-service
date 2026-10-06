@@ -5,6 +5,8 @@ import type {
   UpdateLoopInput
 } from '../../application/LoopService.js';
 import type { Loop, RelatedRecord } from '../../domain/Loop.js';
+import type { TagEntityKind } from '../../application/ports/TagRepository.js';
+import type { TagService } from '../../application/TagService.js';
 import type { ItemStatus } from '../../application/ports/ShoppingListRepository.js';
 import type { TenantTaskListServiceProvider } from '../../application/ports/TenantTaskListServiceProvider.js';
 import {
@@ -39,6 +41,7 @@ export class RestApiController {
     private readonly authenticator: RestAuthenticator,
     private readonly taskListServices: TenantTaskListServiceProvider,
     private readonly loopService: LoopService,
+    private readonly tagService: TagService,
     private readonly heartbeatCheck: HeartbeatCheck
   ) {}
 
@@ -94,13 +97,20 @@ export class RestApiController {
     principal: RestPrincipal
   ): Promise<RestResponse> {
     if (principal.authMethod === 'life2' && principal.applicationId === 'life2-email-agents') {
-      const hasDispatchScope = (principal.scope ?? '').split(/\s+/u).includes('life2:task-dispatch');
-      const allowedRead = request.method === 'GET' && (
-        request.path === '/v1/task-lists' || /^\/v1\/task-lists\/[^/]+\/tasks$/u.test(request.path)
-      );
-      const allowedWrite = request.method === 'POST' && /^\/v1\/task-lists\/[^/]+\/tasks(?:\/[^/]+\/(?:comments|complete))?$/u.test(request.path);
+      const hasDispatchScope = (principal.scope ?? '')
+        .split(/\s+/u)
+        .includes('life2:task-dispatch');
+      const allowedRead =
+        request.method === 'GET' &&
+        (request.path === '/v1/task-lists' ||
+          /^\/v1\/task-lists\/[^/]+\/tasks$/u.test(request.path));
+      const allowedWrite =
+        request.method === 'POST' &&
+        /^\/v1\/task-lists\/[^/]+\/tasks(?:\/[^/]+\/(?:comments|complete))?$/u.test(request.path);
       if (!hasDispatchScope || (!allowedRead && !allowedWrite)) {
-        throw new AuthorizationForbiddenError('Email agents may only use fixed task-dispatch operations.');
+        throw new AuthorizationForbiddenError(
+          'Email agents may only use fixed task-dispatch operations.'
+        );
       }
     }
     if (request.method === 'GET' && request.path === '/health/ready') {
@@ -121,6 +131,14 @@ export class RestApiController {
         request.requestId
       );
     }
+    if (
+      request.path === '/v1/tags' ||
+      request.path.startsWith('/v1/tags/') ||
+      request.path.endsWith('/tags')
+    ) {
+      const tenant = this.requireLife2Principal(principal);
+      return this.routeTags(request, tenant.accountId);
+    }
     if (request.path === '/v1/todoist/connection/authorizations' && request.method === 'POST') {
       this.requireLife2Principal(principal);
       throw new AuthorizationForbiddenError(
@@ -135,7 +153,12 @@ export class RestApiController {
     }
     if (request.path === '/v1/loops' || request.path.startsWith('/v1/loops/')) {
       const life2Principal = this.requireLife2Principal(principal);
-      return this.routeLoops(request, life2Principal.accountId, life2Principal.sub);
+      return this.routeLoops(
+        request,
+        life2Principal.accountId,
+        life2Principal.sub,
+        life2Principal.email
+      );
     }
     if (request.path === '/api/v1/search' && request.method === 'POST') {
       const life2Principal = this.requireLife2Principal(principal);
@@ -274,11 +297,15 @@ export class RestApiController {
       }
     }
 
-    const commentRoute = /^\/v1\/task-lists\/([^/]+)\/tasks\/([^/]+)\/comments$/u.exec(request.path);
+    const commentRoute = /^\/v1\/task-lists\/([^/]+)\/tasks\/([^/]+)\/comments$/u.exec(
+      request.path
+    );
     if (commentRoute !== null && request.method === 'POST') {
       const comment = await taskListService.createComment(
-        decodeURIComponent(commentRoute[1] as string), decodeURIComponent(commentRoute[2] as string),
-        this.parseSingleStringBody(request.body, 'content'), request.headers['idempotency-key']
+        decodeURIComponent(commentRoute[1] as string),
+        decodeURIComponent(commentRoute[2] as string),
+        this.parseSingleStringBody(request.body, 'content'),
+        request.headers['idempotency-key']
       );
       return this.success(201, comment, request.requestId);
     }
@@ -317,10 +344,185 @@ export class RestApiController {
     throw new RouteNotFoundError();
   }
 
+  private async routeTags(request: RestRequest, accountId: string): Promise<RestResponse> {
+    if (request.path === '/v1/tags' && request.method === 'GET') {
+      const query = request.query['query'] ?? '';
+      const limit = this.parsePageNumber(request.query['limit'], 50, 100);
+      const offset = this.parsePageNumber(request.query['offset'], 0, 100_000);
+      return this.success(
+        200,
+        await this.tagService.list(accountId, query, limit, offset),
+        request.requestId,
+        { count: limit }
+      );
+    }
+    if (request.path === '/v1/tags' && request.method === 'POST') {
+      const values = this.parseObjectBody(request.body);
+      this.onlyFields(values, ['name']);
+      if (typeof values['name'] !== 'string') throw new ValidationError('name must be a string.');
+      return this.success(
+        201,
+        await this.tagService.create(accountId, values['name']),
+        request.requestId
+      );
+    }
+    const explore = /^\/v1\/tags\/([^/]+)\/(loops|tasks|items)$/u.exec(request.path);
+    if (explore !== null && request.method === 'GET') {
+      const tagId = decodeURIComponent(explore[1] as string);
+      const kind = ({ loops: 'loop', tasks: 'task', items: 'item' } as const)[
+        explore[2] as 'loops' | 'tasks' | 'items'
+      ];
+      const limit = this.parsePageNumber(request.query['limit'], 50, 100);
+      const offset = this.parsePageNumber(request.query['offset'], 0, 100_000);
+      const status = kind === 'loop' ? this.parseLoopStatus(request.query['status']) : 'all';
+      const references = await this.tagService.explore(
+        accountId,
+        tagId,
+        kind,
+        limit,
+        offset,
+        status
+      );
+      const results: Record<string, unknown>[] = [];
+      const taskLists =
+        kind === 'task' ? await this.taskListServices.forTenant(accountId) : undefined;
+      const tasksByList = new Map<string, Awaited<ReturnType<TaskListService['listTasks']>>>();
+      const shopping =
+        kind === 'item' ? await this.taskListServices.shoppingForTenant(accountId) : undefined;
+      const shoppingItems = shopping ? await shopping.shoppingList.list('all') : undefined;
+      const loops = kind === 'loop' ? await this.loopService.list(accountId, status) : undefined;
+      for (const reference of references) {
+        if (reference.kind === 'loop') {
+          const loop = loops?.find((item) => item.id === reference.id);
+          if (loop)
+            results.push({ kind: 'loop', id: loop.id, label: loop.title, status: loop.status });
+        } else if (reference.kind === 'task' && reference.listId !== undefined) {
+          let tasks = tasksByList.get(reference.listId);
+          if (!tasks && taskLists) {
+            tasks = await taskLists.listTasks(reference.listId, 'all');
+            tasksByList.set(reference.listId, tasks);
+          }
+          const task = tasks?.find((item) => item.id === reference.id);
+          if (task)
+            results.push({
+              kind: 'task',
+              id: task.id,
+              listId: reference.listId,
+              label: task.content,
+              isCompleted: task.isCompleted
+            });
+        } else if (reference.kind === 'item') {
+          const item = shoppingItems?.find((candidate) => candidate.id === reference.id);
+          if (item)
+            results.push({
+              kind: 'item',
+              id: item.id,
+              label: item.content,
+              isCompleted: item.isCompleted
+            });
+        }
+      }
+      return this.success(200, results, request.requestId, {
+        count: results.length,
+        limit,
+        offset,
+        hasMore: references.length === limit
+      });
+    }
+    const entityRoute =
+      /^\/v1\/(loops\/([^/]+)|task-lists\/([^/]+)\/tasks\/([^/]+)|items\/([^/]+))\/tags$/u.exec(
+        request.path
+      );
+    if (entityRoute !== null) {
+      const kind: TagEntityKind =
+        entityRoute[2] !== undefined ? 'loop' : entityRoute[5] !== undefined ? 'item' : 'task';
+      const entityId = decodeURIComponent(
+        (entityRoute[2] ?? entityRoute[4] ?? entityRoute[5]) as string
+      );
+      const listId = entityRoute[3] === undefined ? undefined : decodeURIComponent(entityRoute[3]);
+      return this.routeEntityTags(request, accountId, kind, entityId, listId);
+    }
+    throw new RouteNotFoundError();
+  }
+
+  private async routeEntityTags(
+    request: RestRequest,
+    accountId: string,
+    kind: TagEntityKind,
+    entityId: string,
+    listId?: string
+  ): Promise<RestResponse> {
+    if (request.method === 'POST' || request.method === 'DELETE') {
+      await this.assertTaggableEntity(accountId, kind, entityId, listId);
+    }
+    if (request.method === 'POST') {
+      const values = this.parseObjectBody(request.body);
+      this.onlyFields(values, ['tagId']);
+      if (typeof values['tagId'] !== 'string') throw new ValidationError('tagId must be a string.');
+      return this.success(
+        200,
+        await this.tagService.assign(accountId, values['tagId'], kind, entityId, listId),
+        request.requestId
+      );
+    }
+    if (request.method === 'DELETE') {
+      const tagId = request.query['tagId'];
+      if (!tagId) throw new ValidationError('tagId query parameter is required.');
+      return this.success(
+        200,
+        await this.tagService.remove(accountId, tagId, kind, entityId, listId),
+        request.requestId
+      );
+    }
+    if (request.method === 'GET') {
+      await this.assertTaggableEntity(accountId, kind, entityId, listId);
+      return this.success(
+        200,
+        await this.tagService.forEntity(accountId, kind, entityId, listId),
+        request.requestId
+      );
+    }
+    throw new RouteNotFoundError();
+  }
+
+  private async assertTaggableEntity(
+    accountId: string,
+    kind: TagEntityKind,
+    entityId: string,
+    listId?: string
+  ): Promise<void> {
+    if (kind === 'loop') {
+      await this.loopService.get(accountId, entityId);
+      return;
+    }
+    if (kind === 'task') {
+      if (!listId) throw new ValidationError('listId is required for a Todoist task.');
+      const service = await this.taskListServices.forTenant(accountId);
+      if (!(await service.listTasks(listId, 'all')).some((task) => task.id === entityId)) {
+        throw new ValidationError('The task does not belong to the supplied list and tenant.');
+      }
+      return;
+    }
+    const { shoppingList } = await this.taskListServices.shoppingForTenant(accountId);
+    if (!(await shoppingList.list('all')).some((item) => item.id === entityId)) {
+      throw new ValidationError('The item does not belong to the authenticated tenant.');
+    }
+  }
+
+  private parsePageNumber(value: string | undefined, fallback: number, maximum: number): number {
+    if (value === undefined) return fallback;
+    if (!/^\d+$/u.test(value))
+      throw new ValidationError('Pagination values must be whole numbers.');
+    const number = Number(value);
+    if (number > maximum) throw new ValidationError(`Pagination value must not exceed ${maximum}.`);
+    return number;
+  }
+
   private async routeLoops(
     request: RestRequest,
     accountId: string,
-    sub: string
+    sub: string,
+    email: string
   ): Promise<RestResponse> {
     if (request.path === '/v1/loops' && request.method === 'GET') {
       const status = this.parseLoopStatus(request.query['status']);
@@ -344,10 +546,30 @@ export class RestApiController {
       );
     }
 
-    const loopRoute = /^\/v1\/loops\/([^/]+?)(?:\/(close))?$/u.exec(request.path);
+    const loopRoute = /^\/v1\/loops\/([^/]+?)(?:\/(close|comments))?$/u.exec(request.path);
     if (loopRoute === null) throw new RouteNotFoundError();
     const loopId = decodeURIComponent(loopRoute[1] as string);
     const action = loopRoute[2];
+    if (request.method === 'GET' && action === 'comments') {
+      return this.success(
+        200,
+        await this.loopService.listComments(accountId, loopId),
+        request.requestId
+      );
+    }
+    if (request.method === 'POST' && action === 'comments') {
+      return this.success(
+        201,
+        await this.loopService.addComment(
+          accountId,
+          sub,
+          loopId,
+          this.parseSingleStringBody(request.body, 'content'),
+          email
+        ),
+        request.requestId
+      );
+    }
     if (request.method === 'GET' && action === undefined) {
       return this.success(
         200,

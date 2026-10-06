@@ -1,7 +1,8 @@
 export type LoopStatus = 'open' | 'closed';
 export type LoopPriority = 'high' | 'medium' | 'low';
 
-export type RelatedRecordKind = 'task' | 'appointment' | 'email' | 'document' | 'entity' | 'other';
+export type RelatedRecordKind =
+  'task' | 'appointment' | 'email' | 'document' | 'entity' | 'asset' | 'other';
 
 export interface RelatedRecord {
   readonly kind: RelatedRecordKind;
@@ -12,6 +13,7 @@ export interface RelatedRecord {
 export interface LoopAttributes {
   readonly id: string;
   readonly accountId: string;
+  readonly seedKey?: string;
   readonly title: string;
   readonly description: string | undefined;
   readonly priority: LoopPriority;
@@ -29,6 +31,7 @@ export interface LoopAttributes {
 export class Loop implements LoopAttributes {
   readonly id!: string;
   readonly accountId!: string;
+  readonly seedKey?: string;
   readonly title!: string;
   readonly description!: string | undefined;
   readonly priority!: LoopPriority;

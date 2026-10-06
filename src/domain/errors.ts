@@ -5,6 +5,7 @@ export type ApplicationErrorCode =
   | 'DESTRUCTIVE_ACTION_NOT_CONFIRMED'
   | 'ITEM_NOT_FOUND'
   | 'LOOP_NOT_FOUND'
+  | 'LOOP_CLOSED'
   | 'TASK_LIST_NOT_FOUND'
   | 'TASK_NOT_FOUND'
   | 'TODOIST_NOT_CONNECTED'
@@ -41,6 +42,12 @@ export class ItemNotFoundError extends ApplicationError {
 export class LoopNotFoundError extends ApplicationError {
   constructor() {
     super('LOOP_NOT_FOUND', 'The requested loop was not found.', 404);
+  }
+}
+
+export class LoopClosedError extends ApplicationError {
+  constructor() {
+    super('LOOP_CLOSED', 'Closed loops cannot receive new comments.', 409);
   }
 }
 

@@ -19,11 +19,20 @@ import { ShoppingListItem } from '../../src/domain/ShoppingListItem.js';
 import { InMemoryShoppingListRepository } from '../support/InMemoryShoppingListRepository.js';
 import { InMemoryTaskListRepository } from '../support/InMemoryTaskListRepository.js';
 import { InMemoryLoopRepository } from '../support/InMemoryLoopRepository.js';
+import { TagService } from '../../src/application/TagService.js';
+import { InMemoryTagRepository } from '../support/InMemoryTagRepository.js';
 
 class FixtureAuthenticator implements RestAuthenticator {
   authenticate(header: string | undefined): RestPrincipal | undefined {
     if (header === 'Bearer email-agent' || header === 'Bearer email-agent-no-scope') {
-      return { authMethod: 'life2', accountId: 'account-123', sub: 'user-123', email: 'user@example.com', applicationId: 'life2-email-agents', scope: header === 'Bearer email-agent' ? 'life2:task-dispatch' : 'life2:read' };
+      return {
+        authMethod: 'life2',
+        accountId: 'account-123',
+        sub: 'user-123',
+        email: 'user@example.com',
+        applicationId: 'life2-email-agents',
+        scope: header === 'Bearer email-agent' ? 'life2:task-dispatch' : 'life2:read'
+      };
     }
     if (header === 'Bearer rest-secret') {
       return { authMethod: 'automation', accountId: 'account-123' };
@@ -63,6 +72,7 @@ class RestControllerFixture {
     () => 'loop-1',
     () => new Date('2026-09-30T12:00:00.000Z')
   );
+  readonly tagService = new TagService(new InMemoryTagRepository());
   readonly requestedTenantIds: string[] = [];
   heartbeatHealthy = true;
   readonly controller = new RestApiController(
@@ -97,6 +107,7 @@ class RestControllerFixture {
       }
     },
     this.loopService,
+    this.tagService,
     async () => {
       this.requestedTenantIds.push('account-123');
       return this.heartbeatHealthy && (await new ShoppingListService(this.repository).isReady());
@@ -116,6 +127,73 @@ class RestControllerFixture {
 }
 
 describe('RestApiController', () => {
+  it('supports profile comments with verified attribution and rejects foreign, closed and forged writes', async () => {
+    const fixture = new RestControllerFixture();
+    const request = (
+      method: string,
+      path: string,
+      body?: unknown,
+      authorization = 'Bearer life2-tenant'
+    ): Promise<RestResponse> =>
+      fixture.controller.handle(
+        fixture.request({
+          method,
+          path,
+          headers: { authorization },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) })
+        })
+      );
+    await request('POST', '/v1/loops', { title: 'Follow up', outcome: 'Done' });
+    const created = await request('POST', '/v1/loops/loop-1/comments', {
+      content: '  Progress update  '
+    });
+    expect(created.statusCode).toBe(201);
+    expect(JSON.parse(created.body).data).toMatchObject({
+      loopId: 'loop-1',
+      content: 'Progress update',
+      authorSub: 'user-123',
+      authorEmail: 'user@example.com',
+      createdAt: '2026-09-30T12:00:00.000Z'
+    });
+    const stored = await request('GET', '/v1/loops/loop-1/comments');
+    expect(JSON.parse(stored.body).data).toEqual([JSON.parse(created.body).data]);
+    expect(
+      (await request('GET', '/v1/loops/loop-1/comments', undefined, 'Bearer life2-other'))
+        .statusCode
+    ).toBe(404);
+    expect(
+      (
+        await request(
+          'POST',
+          '/v1/loops/loop-1/comments',
+          { content: 'Foreign' },
+          'Bearer life2-other'
+        )
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (await request('GET', '/v1/loops/loop-1/comments', undefined, 'Bearer rest-secret'))
+        .statusCode
+    ).toBe(403);
+    for (const body of [
+      { content: ' ' },
+      { content: 'x'.repeat(4_001) },
+      { content: 12 },
+      { content: 'Valid', authorSub: 'forged' },
+      { content: 'Valid', authorEmail: 'forged@example.com' },
+      { content: 'Valid', accountId: 'other' }
+    ]) {
+      expect((await request('POST', '/v1/loops/loop-1/comments', body)).statusCode).toBe(400);
+    }
+    await request('POST', '/v1/loops/loop-1/close', { confirmed: true });
+    expect(
+      (await request('POST', '/v1/loops/loop-1/comments', { content: 'Late' })).statusCode
+    ).toBe(409);
+    expect(JSON.parse((await request('GET', '/v1/loops/loop-1/comments')).body).data).toEqual([
+      JSON.parse(created.body).data
+    ]);
+  });
+
   it('creates and lists account-scoped loops only for a Life2 principal', async () => {
     const fixture = new RestControllerFixture();
 
@@ -163,6 +241,93 @@ describe('RestApiController', () => {
       })
     );
     expect(automation.statusCode).toBe(403);
+  });
+
+  it('creates tenant-owned tags, assigns multiple tags to an owned Loop, and leaves other tenants empty', async () => {
+    const fixture = new RestControllerFixture();
+    const headers = { authorization: 'Bearer life2-tenant' };
+    const request = (
+      method: string,
+      path: string,
+      body?: unknown,
+      query: Record<string, string> = {}
+    ): Promise<RestResponse> =>
+      fixture.controller.handle(
+        fixture.request({
+          method,
+          path,
+          headers,
+          query,
+          ...(body === undefined ? {} : { body: JSON.stringify(body) })
+        })
+      );
+    await request('POST', '/v1/loops', { title: 'Care plan', outcome: 'The plan is agreed.' });
+    const first = await request('POST', '/v1/tags', { name: '  Family  planning ' });
+    const second = await request('POST', '/v1/tags', { name: 'Health' });
+    expect(first.statusCode).toBe(201);
+    expect(
+      (await request('POST', '/v1/loops/loop-1/tags', { tagId: JSON.parse(first.body).data.id }))
+        .statusCode
+    ).toBe(200);
+    await request('POST', '/v1/loops/loop-1/tags', { tagId: JSON.parse(second.body).data.id });
+    expect(
+      JSON.parse((await request('GET', '/v1/loops/loop-1/tags')).body).data.map(
+        (tag: { name: string }) => tag.name
+      )
+    ).toEqual(['Family planning', 'Health']);
+    expect(
+      JSON.parse((await request('GET', `/v1/tags/${JSON.parse(first.body).data.id}/loops`)).body)
+        .data
+    ).toEqual([{ kind: 'loop', id: 'loop-1', label: 'Care plan', status: 'open' }]);
+    expect(
+      (
+        await fixture.controller.handle(
+          fixture.request({
+            path: '/v1/loops/loop-1/tags',
+            headers: { authorization: 'Bearer life2-other' }
+          })
+        )
+      ).statusCode
+    ).toBe(404);
+  });
+
+  it('validates tenant task ownership before assigning a tag and makes removal assignment-local', async () => {
+    const fixture = new RestControllerFixture();
+    const headers = { authorization: 'Bearer life2-tenant' };
+    const request = (
+      method: string,
+      path: string,
+      body?: unknown,
+      query: Record<string, string> = {}
+    ): Promise<RestResponse> =>
+      fixture.controller.handle(
+        fixture.request({
+          method,
+          path,
+          headers,
+          query,
+          ...(body === undefined ? {} : { body: JSON.stringify(body) })
+        })
+      );
+    const tag = JSON.parse((await request('POST', '/v1/tags', { name: 'Errands' })).body).data;
+    expect(
+      (await request('POST', '/v1/task-lists/list-1/tasks/task-1/tags', { tagId: tag.id }))
+        .statusCode
+    ).toBe(200);
+    expect(JSON.parse((await request('GET', `/v1/tags/${tag.id}/tasks`)).body).data).toEqual([
+      { kind: 'task', id: 'task-1', listId: 'list-1', label: 'Milk', isCompleted: false }
+    ]);
+    expect(
+      (await request('POST', '/v1/task-lists/list-2/tasks/task-1/tags', { tagId: tag.id }))
+        .statusCode
+    ).toBe(400);
+    await request('DELETE', '/v1/task-lists/list-1/tasks/task-1/tags', undefined, {
+      tagId: tag.id
+    });
+    expect(
+      JSON.parse((await request('GET', '/v1/task-lists/list-1/tasks/task-1/tags')).body).data
+    ).toEqual([]);
+    expect(JSON.parse((await request('GET', '/v1/tags')).body).data).toHaveLength(1);
   });
 
   it('reads, updates, filters, and explicitly closes Loops without crossing tenants', async () => {
@@ -596,29 +761,81 @@ describe('RestApiController', () => {
 
   it('limits email delegations to fixed dispatch routes and requires their task scope', async () => {
     const fixture = new RestControllerFixture();
-    for (const [method, path] of [['GET', '/v1/items'], ['DELETE', '/v1/task-lists/list-1'], ['PATCH', '/v1/task-lists/list-1/tasks/task-1'], ['GET', '/v1/tags'], ['POST', '/v1/task-lists']] as const) {
-      const response = await fixture.controller.handle(fixture.request({ method, path, headers: { authorization: 'Bearer email-agent' }, body: JSON.stringify({ content: 'Forbidden', name: 'Forbidden' }) }));
+    for (const [method, path] of [
+      ['GET', '/v1/items'],
+      ['DELETE', '/v1/task-lists/list-1'],
+      ['PATCH', '/v1/task-lists/list-1/tasks/task-1'],
+      ['GET', '/v1/tags'],
+      ['POST', '/v1/task-lists']
+    ] as const) {
+      const response = await fixture.controller.handle(
+        fixture.request({
+          method,
+          path,
+          headers: { authorization: 'Bearer email-agent' },
+          body: JSON.stringify({ content: 'Forbidden', name: 'Forbidden' })
+        })
+      );
       expect(response.statusCode).toBe(403);
     }
-    const missingScope = await fixture.controller.handle(fixture.request({ method: 'GET', path: '/v1/task-lists', headers: { authorization: 'Bearer email-agent-no-scope' } }));
+    const missingScope = await fixture.controller.handle(
+      fixture.request({
+        method: 'GET',
+        path: '/v1/task-lists',
+        headers: { authorization: 'Bearer email-agent-no-scope' }
+      })
+    );
     expect(missingScope.statusCode).toBe(403);
     for (const path of ['/v1/task-lists', '/v1/task-lists/list-1/tasks']) {
-      const allowed = await fixture.controller.handle(fixture.request({ method: 'GET', path, headers: { authorization: 'Bearer email-agent' } }));
+      const allowed = await fixture.controller.handle(
+        fixture.request({ method: 'GET', path, headers: { authorization: 'Bearer email-agent' } })
+      );
       expect(allowed.statusCode).toBe(200);
     }
   });
 
   it('supports tenant-authenticated feedback comments and rejects invalid dispatch keys', async () => {
     const fixture = new RestControllerFixture();
-    const headers = { authorization: 'Bearer life2-tenant', 'idempotency-key': '123e4567-e89b-42d3-a456-426614174000' };
-    const response = await fixture.controller.handle(fixture.request({ method: 'POST', path: '/v1/task-lists/list-1/tasks/task-1/comments', headers, body: JSON.stringify({ content: 'Feedback' }) }));
+    const headers = {
+      authorization: 'Bearer life2-tenant',
+      'idempotency-key': '123e4567-e89b-42d3-a456-426614174000'
+    };
+    const response = await fixture.controller.handle(
+      fixture.request({
+        method: 'POST',
+        path: '/v1/task-lists/list-1/tasks/task-1/comments',
+        headers,
+        body: JSON.stringify({ content: 'Feedback' })
+      })
+    );
     expect(response.statusCode).toBe(201);
-    expect(JSON.parse(response.body).data).toEqual({ id: 'comment-1', taskId: 'task-1', content: 'Feedback' });
-    for (const path of ['/v1/task-lists/list-1/tasks', '/v1/task-lists/list-1/tasks/task-1/comments']) {
-      const invalid = await fixture.controller.handle(fixture.request({ method: 'POST', path, headers: { ...headers, 'idempotency-key': 'bad-key' }, body: JSON.stringify({ content: 'Feedback' }) }));
+    expect(JSON.parse(response.body).data).toEqual({
+      id: 'comment-1',
+      taskId: 'task-1',
+      content: 'Feedback'
+    });
+    for (const path of [
+      '/v1/task-lists/list-1/tasks',
+      '/v1/task-lists/list-1/tasks/task-1/comments'
+    ]) {
+      const invalid = await fixture.controller.handle(
+        fixture.request({
+          method: 'POST',
+          path,
+          headers: { ...headers, 'idempotency-key': 'bad-key' },
+          body: JSON.stringify({ content: 'Feedback' })
+        })
+      );
       expect(invalid.statusCode).toBe(400);
     }
-    const automation = await fixture.controller.handle(fixture.request({ method: 'POST', path: '/v1/task-lists/list-1/tasks/task-1/comments', headers: { authorization: 'Bearer rest-secret' }, body: JSON.stringify({ content: 'Feedback' }) }));
+    const automation = await fixture.controller.handle(
+      fixture.request({
+        method: 'POST',
+        path: '/v1/task-lists/list-1/tasks/task-1/comments',
+        headers: { authorization: 'Bearer rest-secret' },
+        body: JSON.stringify({ content: 'Feedback' })
+      })
+    );
     expect(automation.statusCode).toBe(403);
   });
 

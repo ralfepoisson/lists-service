@@ -46,7 +46,7 @@ else
   aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry" >/dev/null
 fi
 docker buildx build --builder "$builder" --platform linux/arm64 \
-  --build-arg "LIFE2_RELEASE_REVISION=$sha" --build-arg COMPONENT_VERSION=0.10.2 \
+  --build-arg "LIFE2_RELEASE_REVISION=$sha" --build-arg COMPONENT_VERSION=0.10.3 \
   --provenance=true --sbom=true --push -t "$tag" "$repo"
 digest="$(aws ecr describe-images --region "$region" --repository-name "$repository" \
   --image-ids "imageTag=git-$sha" --query 'imageDetails[0].imageDigest' --output text)"

@@ -127,6 +127,47 @@ class RestControllerFixture {
 }
 
 describe('RestApiController', () => {
+  it('permits the application browser preflight without bypassing bearer authentication', async () => {
+    const fixture = new RestControllerFixture();
+    const origin = 'https://app.life-sqrd.com';
+    const headers = {
+      origin,
+      'access-control-request-method': 'GET',
+      'access-control-request-headers': 'Authorization, Content-Type'
+    };
+    const preflight = await fixture.controller.handle(
+      fixture.request({ method: 'OPTIONS', path: '/v1/loops', headers })
+    );
+    expect(preflight.statusCode).toBe(204);
+    expect(preflight.headers['access-control-allow-origin']).toBe(origin);
+    expect(preflight.headers['access-control-allow-headers']).toBe('Authorization, Content-Type');
+    expect(preflight.headers['access-control-allow-credentials']).toBeUndefined();
+    const unauthorized = await fixture.controller.handle(
+      fixture.request({ path: '/v1/loops', headers: { origin } })
+    );
+    expect(unauthorized.statusCode).toBe(401);
+    expect(unauthorized.headers['access-control-allow-origin']).toBe(origin);
+    const authorized = await fixture.controller.handle(
+      fixture.request({
+        path: '/v1/loops',
+        headers: { origin, authorization: 'Bearer life2-tenant' }
+      })
+    );
+    expect(authorized.statusCode).toBe(200);
+    expect(authorized.headers['access-control-allow-origin']).toBe(origin);
+    expect(authorized.headers['vary']).toBe('Origin');
+    for (const rejected of [
+      { ...headers, origin: 'https://untrusted.example' },
+      { ...headers, 'access-control-request-method': 'TRACE' },
+      { ...headers, 'access-control-request-headers': 'X-Admin' }
+    ]) {
+      const result = await fixture.controller.handle(
+        fixture.request({ method: 'OPTIONS', path: '/v1/loops', headers: rejected })
+      );
+      expect(result.statusCode).toBe(403);
+      expect(result.headers['access-control-allow-origin']).toBeUndefined();
+    }
+  });
   it('supports profile comments with verified attribution and rejects foreign, closed and forged writes', async () => {
     const fixture = new RestControllerFixture();
     const request = (
@@ -486,7 +527,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body)).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.10.2',
+        version: '0.10.3',
         revision: 'lists-test-revision'
       });
     } finally {

@@ -46,6 +46,45 @@ export class RestApiController {
   ) {}
 
   async handle(request: RestRequest): Promise<RestResponse> {
+    const applicationOrigin = 'https://app.life-sqrd.com';
+    const allowedMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+    const allowedHeaders = ['authorization', 'content-type'];
+    const originAllowed = request.headers['origin'] === applicationOrigin;
+    if (request.method === 'OPTIONS' && request.path.startsWith('/v1/')) {
+      const requestedHeaders = (request.headers['access-control-request-headers'] ?? '')
+        .split(',')
+        .map((header) => header.trim().toLowerCase())
+        .filter(Boolean);
+      if (
+        !originAllowed ||
+        !allowedMethods.includes(request.headers['access-control-request-method'] ?? '') ||
+        requestedHeaders.some((header) => !allowedHeaders.includes(header))
+      ) {
+        return { statusCode: 403, headers: { vary: 'Origin' }, body: '' };
+      }
+      return {
+        statusCode: 204,
+        headers: {
+          'access-control-allow-origin': applicationOrigin,
+          'access-control-allow-methods': allowedMethods.join(', '),
+          'access-control-allow-headers': 'Authorization, Content-Type',
+          vary: 'Origin'
+        },
+        body: ''
+      };
+    }
+    const response = await this.handleRequest(request);
+    return {
+      ...response,
+      headers: {
+        ...response.headers,
+        vary: 'Origin',
+        ...(originAllowed ? { 'access-control-allow-origin': applicationOrigin } : {})
+      }
+    };
+  }
+
+  private async handleRequest(request: RestRequest): Promise<RestResponse> {
     try {
       if (request.method === 'GET' && request.path === '/health') {
         return this.success(200, { status: 'ok' }, request.requestId);

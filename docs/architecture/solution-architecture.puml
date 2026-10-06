@@ -13,12 +13,12 @@ note as StatusNote
   REST Lambda v2, canonical TLS/auth, and Todoist reads verified 2026-08-08.
   Tenant catalogue/project Task Lists has local automated evidence only.
   Multitenant provider acceptance and deployment remain pending.
-  Loops PostgreSQL is verified locally with disposable real-database tests;
-  production Lambda lacks VPC/database/migration wiring for Loops.
-  Guarded EC2 host tools and an empty Lists database are installed, but no
-  migration, candidate acceptance, or production ingress selection exists.
-  Terraform retains the API Gateway domain and Lambda alias during a future
-  DNS-only A/AAAA handoff to the accepted ALB/Apache route.
+  Guarded EC2 Lists 0.10.1 is active with migrations 001-005, genuine
+  Loop/comment/tag authorization and persistence, and protected restore proof.
+  The public route uses the existing ALB/Apache loopback target. The retained
+  Lambda active alias remains unchanged and lacks the Loop database wiring.
+  Patch candidates preserve the accepted API as rollback and restore-rehearse
+  the current database before activation. Browser preflight repair is gated.
   Alexa and CI remain unverified.
 end note
 
@@ -90,7 +90,7 @@ cloud "AWS" {
 
 file "Local read-only\nsecret mounts" as LocalSecrets
 component "Node REST composition\nfile or AWS secrets" as LocalComposition
-package "EC2 candidate prerequisites (not active)" as Ec2Candidate {
+package "EC2 active release and guarded patch candidate" as Ec2Candidate {
   component "Immutable ARM64 digest +\nmanifest/revision/migration hash" as CandidateManifest
   component "Protected runtime, migration, backup env\n+ root-only smoke JWTs" as CandidateSecrets
   component "One-time database provisioner\nfixed four-role grants + root-only env" as DatabaseProvisioner
@@ -105,12 +105,11 @@ cloud "Todoist" {
 }
 
 Household --> Alexa
-RestClient --> ApiGateway : HTTPS + bearer token
-Webapp --> ApiGateway : HTTPS + Life2 JWT
-Route53 --> ApiGateway
-Route53 ..> Alb : future guarded A/AAAA switch
-Alb ..> Apache : staged Lists host rule
-Apache ..> CandidateApi : accepted loopback port
+RestClient --> Alb : HTTPS + bearer token
+Webapp --> Alb : HTTPS + Life2 JWT
+Route53 --> Alb
+Alb --> Apache : existing Lists host rule
+Apache --> CandidateApi : accepted loopback port
 Webapp --> LocalProxy : local same-origin request
 LocalProxy --> LocalApi
 LocalApi --> LocalComposition
@@ -131,6 +130,11 @@ Alexa --> AlexaAlias : signed Alexa request
 AlexaAlias --> AlexaAdapter
 
 RestAdapter --> AuthAdapter
+note right of RestAdapter
+  Exact https://app.life-sqrd.com browser origin.
+  Preflight permits supported methods and Authorization/Content-Type only;
+  actual requests still require bearer authentication and tenant ownership.
+end note
 AuthAdapter --> StaticAuth
 AuthAdapter --> JwtAuth
 JwtAuth --> TaskListAuth : verified accountId

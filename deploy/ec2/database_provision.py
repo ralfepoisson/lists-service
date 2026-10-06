@@ -28,6 +28,11 @@ INPUT_KEYS = {
 }
 PASSWORD_KEYS = tuple(sorted(key for key in INPUT_KEYS if key.startswith("PGPASSWORD_")))
 ROLES = ("lists_runtime", "lists_migrator", "lists_backup", "lists_restore")
+BACKUP_SEQUENCE_GRANTS = (
+    "GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO lists_backup;\n"
+    "ALTER DEFAULT PRIVILEGES FOR ROLE lists_migrator IN SCHEMA public "
+    "GRANT SELECT ON SEQUENCES TO lists_backup;\n"
+)
 DOCKER = "/usr/bin/docker"
 
 
@@ -107,7 +112,7 @@ def sql_phases(values):
         "ALTER DEFAULT PRIVILEGES FOR ROLE lists_migrator IN SCHEMA public "
         "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO lists_runtime;\n"
         "ALTER DEFAULT PRIVILEGES FOR ROLE lists_migrator IN SCHEMA public "
-        "GRANT SELECT ON TABLES TO lists_backup;\n",
+        "GRANT SELECT ON TABLES TO lists_backup;\n" + BACKUP_SEQUENCE_GRANTS,
     )
 
 

@@ -198,7 +198,9 @@ end note
 note bottom of Migration
   The first production database is owned by lists_migrator.
   Default table grants give lists_runtime DML and lists_backup
-  SELECT only. lists_restore has no production database CONNECT;
+  SELECT only, including identity sequences needed by pg_dump.
+  Backup cannot advance or update sequences.
+  lists_restore has no production database CONNECT;
   its cluster CREATEDB grant is used only for a scratch restore.
   Credentials live in separate root-only files, outside this model.
 end note

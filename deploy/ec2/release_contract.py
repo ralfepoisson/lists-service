@@ -15,7 +15,7 @@ ACCOUNT = "154596858576"
 REGION = "eu-west-1"
 VERSION = "0.9.0"
 MIGRATION = "001_loops.sql"
-UPGRADE_VERSION = "0.10.1"
+UPGRADE_VERSION = "0.10.2"
 UPGRADE_MIGRATIONS = ("001_loops.sql", "002_lists_tags.sql", "003_loop_seed_identity.sql", "004_loop_comments.sql", "005_loop_asset_references.sql")
 UPGRADE_MANIFEST_KEYS = {"schemaVersion", "component", "version", "revision", "image", "migrations"}
 IMAGE_PREFIX = f"{ACCOUNT}.dkr.ecr.{REGION}.amazonaws.com/life2-lists@sha256:"
@@ -43,7 +43,7 @@ def validate_manifest(manifest):
         raise ValueError("release manifest has unexpected fields")
     if type(manifest["schemaVersion"]) is not int or manifest["schemaVersion"] != (2 if upgrade else 1):
         raise ValueError("unsupported release manifest schema")
-    if manifest["component"] != "lists-service" or manifest["version"] != (UPGRADE_VERSION if upgrade else VERSION):
+    if manifest["component"] != "lists-service" or manifest["version"] not in (("0.10.1", UPGRADE_VERSION) if upgrade else (VERSION,)):
         raise ValueError("release component or version mismatch")
     if not isinstance(manifest["revision"], str) or not re.fullmatch(
         r"[0-9a-f]{40}", manifest["revision"]

@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote, urlsplit
 
 from backup_restore import perform_backup_restore
-from release_contract import ACCOUNT, IMAGE_PREFIX, REGION, load_protected_env, parse_manifest
+from release_contract import ACCOUNT, IMAGE_PREFIX, REGION, UPGRADE_MIGRATIONS, UPGRADE_VERSION, load_protected_env, parse_manifest
 
 
 APP_ROOT = pathlib.Path("/srv/apps/life2-lists")
@@ -64,6 +64,7 @@ def render_compose(*, image, runtime_env, migration_env, port, ingress_network=N
             "api": {
                 **common,
                 "command": ["node", "local-rest.cjs"],
+                "restart": "unless-stopped",
                 "env_file": [runtime_env],
                 "ports": [f"127.0.0.1:{port}:3000"],
                 "networks": ["postgresql", "ingress"],
@@ -218,23 +219,45 @@ def _verify_image(manifest):
 
 
 
-def _retained_ingress_network():
+def expected_baseline_tables(baseline, migrations):
+    if baseline.get("schemaVersion") == 1 and baseline.get("version") == "0.9.0" and baseline.get("migrationSha256") == migrations.get("001_loops.sql"):
+        return 3
+    if baseline.get("schemaVersion") == 2 and baseline.get("version") == "0.10.1" and baseline.get("migrations") == migrations:
+        return 6
+    raise CandidateFailure("retained Lists schema or checksums are not an accepted upgrade baseline")
+
+
+def _retained_ingress_network(manifest):
     from candidate_smoke import _request, _expect
     identity = _expect(*_request("https://lists.life-sqrd.com", "/version"), 200)
     sha = identity.get("revision")
-    if identity.get("version") != "0.9.0" or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
-        raise CandidateFailure("upgrade requires retained 0.9 public provenance")
-    project = "life2-lists-" + sha[:12]
-    name = project + "_ingress"
+    if identity.get("version") not in ("0.9.0", "0.10.1") or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise CandidateFailure("upgrade requires retained public provenance")
+    previous = APP_ROOT / "releases" / sha
+    _trusted_file(previous / "release.json", 0o600)
+    _trusted_file(previous / "compose.generated.json", 0o600)
+    baseline = parse_manifest((previous / "release.json").read_bytes())
+    if baseline["revision"] != sha or baseline["version"] != identity["version"]:
+        raise CandidateFailure("retained release provenance differs")
+    tables = expected_baseline_tables(baseline, manifest["migrations"])
+    compose = json.loads((previous / "compose.generated.json").read_text())
+    ingress = compose["networks"]["ingress"]
+    name = ingress.get("name") if ingress.get("external") is True else "life2-lists-" + sha[:12] + "_ingress"
+    if not isinstance(name, str) or not re.fullmatch(r"life2-lists-[0-9a-f]{12}_ingress", name):
+        raise CandidateFailure("retained Lists ingress identity differs")
+    project = name[:-len("_ingress")]
     network = json.loads(_run([DOCKER, "network", "inspect", name]))[0]
     labels = network.get("Labels", {})
     if network.get("Name") != name or network.get("Driver") != "bridge" or network.get("Internal") is not False or labels.get("com.docker.compose.project") != project or labels.get("com.docker.compose.network") != "ingress":
         raise CandidateFailure("retained Lists ingress ownership differs")
-    return name
+    return name, tables
+
 
 def stage_candidate(staged):
     _require_installed_tools()
     manifest, data = _snapshot_manifest(staged)
+    if manifest["schemaVersion"] == 2 and manifest["version"] != UPGRADE_VERSION:
+        raise CandidateFailure("candidate must match the reviewed target patch version")
     if _run([AWS, "sts", "get-caller-identity", "--query", "Account", "--output", "text"]).decode().strip() != ACCOUNT:
         raise CandidateFailure("AWS account identity mismatch")
     shared = APP_ROOT / "shared"
@@ -270,7 +293,7 @@ def stage_candidate(staged):
     with manifest_copy.open("xb") as target:
         target.write(data)
     manifest_copy.chmod(0o600)
-    ingress_network = _retained_ingress_network() if manifest["schemaVersion"] == 2 else None
+    ingress_network, baseline_tables = _retained_ingress_network(manifest) if manifest["schemaVersion"] == 2 else (None, 0)
     compose_file = release / "compose.generated.json"
     compose_file.write_text(json.dumps(render_compose(
         image=manifest["image"], runtime_env=str(runtime),
@@ -309,8 +332,8 @@ def stage_candidate(staged):
         if manifest["schemaVersion"] == 1:
             if backup_result["schema_table_count"] != 0 or backup_result["source_counts"] != (None, None):
                 raise CandidateFailure("initial Lists database must be empty before migration")
-        elif backup_result["schema_table_count"] != 3 or backup_result["source_counts"] == (None, None):
-            raise CandidateFailure("upgrade requires the retained accepted three-table 0.9 schema")
+        elif backup_result["schema_table_count"] != baseline_tables or backup_result["source_counts"] == (None, None):
+            raise CandidateFailure("upgrade requires the exact retained accepted schema")
         _compose(project, compose_file, "--profile", "migration", "run", "--rm", "migrate", timeout=180)
         started = True
         _compose(project, compose_file, "up", "--detach", "--wait", "--wait-timeout", "120", "api", timeout=180)
@@ -352,7 +375,7 @@ def activate_upgrade(sha):
     _trusted_file(result_file, 0o600)
     manifest = parse_manifest(manifest_file.read_bytes())
     result = json.loads(result_file.read_text())
-    if manifest["schemaVersion"] != 2 or result.get("status") != "candidate-validated" or result.get("revision") != sha or result.get("image") != manifest["image"] or result.get("restoreRehearsed") is not True:
+    if manifest["schemaVersion"] != 2 or manifest["version"] != UPGRADE_VERSION or result.get("status") != "candidate-validated" or result.get("revision") != sha or result.get("image") != manifest["image"] or result.get("restoreRehearsed") is not True:
         raise CandidateFailure("upgrade lacks matching restored candidate acceptance")
     port = result.get("port")
     if port not in PORTS:
@@ -379,13 +402,14 @@ def activate_upgrade(sha):
     _trusted_file(site, 0o644)
     previous = site.read_bytes()
     before = _expect(*_request("https://lists.life-sqrd.com", "/version"), 200)
-    if before.get("version") != "0.9.0" or not isinstance(before.get("revision"), str) or not re.fullmatch(r"[0-9a-f]{40}", before["revision"]):
-        raise CandidateFailure("upgrade requires the retained accepted 0.9 public release")
+    if before.get("version") not in ("0.9.0", "0.10.1") or not isinstance(before.get("revision"), str) or not re.fullmatch(r"[0-9a-f]{40}", before["revision"]):
+        raise CandidateFailure("upgrade requires the retained accepted public baseline")
     previous_manifest = APP_ROOT / "releases" / before.get("revision", "invalid") / "release.json"
     _trusted_file(previous_manifest, 0o600)
     previous_identity = parse_manifest(previous_manifest.read_bytes())
-    if previous_identity["schemaVersion"] != 1 or previous_identity["revision"] != before["revision"]:
+    if previous_identity["revision"] != before["revision"] or previous_identity["version"] != before["version"]:
         raise CandidateFailure("retained rollback provenance differs")
+    expected_baseline_tables(previous_identity, manifest["migrations"])
     changed = render_ingress_upgrade(previous, port)
     backup = release / "apache-before.conf"
     with backup.open("xb") as out:

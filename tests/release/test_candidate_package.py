@@ -54,6 +54,7 @@ class CandidatePackageTest(unittest.TestCase):
         )
         services = compose["services"]
         self.assertEqual(services["api"]["image"], image)
+        self.assertEqual(services["api"]["restart"], "unless-stopped")
         self.assertEqual(services["api"]["ports"], ["127.0.0.1:43240:3000"])
         self.assertEqual(
             services["api"]["env_file"], ["/srv/apps/life2-lists/shared/runtime.env"]
@@ -104,3 +105,14 @@ class UpgradeNetworkTest(unittest.TestCase):
         for invalid in ("other_ingress", "personal-projects-postgresql", "life2-lists-x_ingress"):
             with self.assertRaises(ValueError):
                 host_candidate.render_compose(**kwargs, ingress_network=invalid)
+
+
+class RetainedUpgradeBaselineTest(unittest.TestCase):
+    def test_exact_retained_checksum_baseline_is_required_for_repeat_upgrade(self):
+        migrations = {name: "a" * 64 for name in host_candidate.UPGRADE_MIGRATIONS}
+        accepted = {"schemaVersion": 2, "version": "0.10.1", "migrations": migrations}
+        self.assertEqual(host_candidate.expected_baseline_tables(accepted, migrations), 6)
+        changed = {**accepted, "migrations": {**migrations, "004_loop_comments.sql": "b" * 64}}
+        for rejected in (changed, {**accepted, "version": "0.10.2"}, {**accepted, "schemaVersion": 3}):
+            with self.assertRaises(host_candidate.CandidateFailure):
+                host_candidate.expected_baseline_tables(rejected, migrations)

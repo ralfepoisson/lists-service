@@ -1,13 +1,13 @@
 # Guarded EC2 Lists release and upgrade
 
-## Current 0.10.1 upgrade contract
+## Current 0.10.2 upgrade contract
 
 The accepted 0.9.0 service already serves the canonical origin through the
 existing EC2 Apache route. The upgrade preserves ALB, DNS, API Gateway and
 Lambda aliases. No new credentials or provider schedule is created.
 
 Publication requires the full CI gate below and a clean committed main. The
-schema-2 manifest binds version 0.10.1, immutable ARM64 image, source revision
+schema-2 manifest binds version 0.10.2, immutable ARM64 image, source revision
 and the exact SHA-256 of all five migrations. The fixed host helper verifies
 image labels and each migration inside the image. It reuses the retained Lists
 bridge only after checking its Docker Compose ownership labels.
@@ -246,3 +246,12 @@ host-tool revisions, dual-tenant smoke, Lists ALB/Apache routing, Terraform/DNS
 ownership, and `/srv` capacity for image, backup, and rollback artifacts.
 
 Production publication supports the bounded `REGISTRY_LOGIN_HOST=ssh://personal-projects` for registry authentication with an existing remote Buildx builder when the canonical developer VM cannot reach ECR. Other endpoints are rejected. Local development orchestration retains the canonical socket.
+
+The 0.10.2 durability patch declares `restart: unless-stopped` on the API only.
+Its reviewed repeat-upgrade baseline accepts exact 0.10.1 provenance, all five
+matching migration checksums and the six-table schema. The restored migrations
+remain idempotent and add no business rows. Existing tagged/comment release
+fixtures and imported source Loops remain preserved. Before staging the patch,
+stop only the retained 0.9 API to free its port; retain its container, image,
+release and backup artifacts. Active 0.10.1 remains live throughout candidate
+validation and is the captured-route rollback target for the patch.

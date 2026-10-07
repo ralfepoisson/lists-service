@@ -239,6 +239,12 @@ from the same local Auth signing key, generates or validates the local
 catalogue whose token references point at read-only mounted files, and routes
 `/api/lists/` through Nginx.
 
+The migration runner records a SHA-256 checksum for each applied SQL file.
+For databases migrated by the earlier name-only runner, it backfills a missing
+checksum only when migrations 001–005 still match their accepted immutable
+source bytes. An edited migration or an unknown name fails the integrity gate
+before later migrations run.
+
 Engineering work must follow the
 [implementation guidelines](docs/implementation/implementation_guidelines.md)
 and record completed slices in the

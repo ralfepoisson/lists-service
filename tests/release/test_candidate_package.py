@@ -125,3 +125,22 @@ class PatchUpgradeBaselineTest(unittest.TestCase):
         self.assertEqual(host_candidate.expected_baseline_tables(accepted, migrations), 6)
         with self.assertRaises(host_candidate.CandidateFailure):
             host_candidate.expected_baseline_tables({**accepted, "migrations": {**migrations, "005_loop_asset_references.sql": "b" * 64}}, migrations)
+
+
+class PublicReloadAcceptanceTest(unittest.TestCase):
+    def test_graceful_reload_must_eventually_pass_the_complete_acceptance(self):
+        from unittest.mock import Mock
+        accept = Mock(side_effect=[host_candidate.CandidateFailure("upgrade served identity differs"), None])
+        with patch.object(host_candidate.time, "sleep") as sleep:
+            host_candidate.wait_for_public_acceptance(accept)
+        self.assertEqual(accept.call_count, 2)
+        sleep.assert_called_once_with(1)
+
+    def test_exhausted_public_acceptance_keeps_failure_for_ingress_rollback(self):
+        from unittest.mock import Mock
+        accept = Mock(side_effect=host_candidate.CandidateFailure("upgrade served identity differs"))
+        with patch.object(host_candidate.time, "sleep") as sleep:
+            with self.assertRaises(host_candidate.CandidateFailure):
+                host_candidate.wait_for_public_acceptance(accept, attempts=3)
+        self.assertEqual(accept.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)

@@ -271,3 +271,8 @@ are introduced. Preserve the accepted0.10.3 release and its captured ingress.
 For exact pinned local release validation, `LIFE2_NODE_BIN_DIR` may select the
 installed Node24.18.0/npm11.16.0 binary directory before CI. The existing major
 version guard remains active and immutable runtime images keep their digest pin.
+
+Public activation allows up to ten one-second complete acceptance attempts after
+Apache graceful reload, which may briefly serve the retained generation. Every
+attempt still requires exact new identity, real readiness, all tenant reads and
+negative authorization. Exhaustion restores the captured ingress; no gate is waived.

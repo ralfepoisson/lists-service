@@ -15,6 +15,7 @@ import socket
 import stat
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from urllib.parse import quote, urlsplit
 
@@ -365,6 +366,19 @@ def stage_candidate(staged):
         raise
 
 
+def wait_for_public_acceptance(accept, attempts=10):
+    # Apache graceful reload can briefly serve the retained generation. Every
+    # attempt must still pass the complete exact-identity/authenticated gate.
+    for attempt in range(attempts):
+        try:
+            accept()
+            return
+        except (CandidateFailure, ValueError, OSError):
+            if attempt + 1 == attempts:
+                raise
+            time.sleep(1)
+
+
 def activate_upgrade(sha):
     _require_installed_tools()
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
@@ -419,7 +433,7 @@ def activate_upgrade(sha):
         site.write_bytes(changed)
         _run(["/usr/sbin/apache2ctl", "configtest"])
         _run(["/usr/bin/systemctl", "reload", "apache2"])
-        accept("https://lists.life-sqrd.com")
+        wait_for_public_acceptance(lambda: accept("https://lists.life-sqrd.com"))
         receipt = {"status": "activated", "revision": sha, "image": manifest["image"], "port": port, "previousRevision": before["revision"], "activatedAt": datetime.now(timezone.utc).isoformat()}
         with (release / "activation.json").open("x") as out:
             json.dump(receipt, out)

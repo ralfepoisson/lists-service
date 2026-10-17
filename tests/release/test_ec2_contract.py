@@ -31,6 +31,12 @@ def valid_manifest():
 
 
 class ReleaseContractTest(unittest.TestCase):
+    def test_release_image_version_matches_package_and_manifest(self):
+        version = json.loads((ROOT / "package.json").read_text())["version"]
+        self.assertEqual(ec2_contract.UPGRADE_VERSION, version)
+        self.assertIn("ARG COMPONENT_VERSION=" + version, (ROOT / "Dockerfile").read_text())
+        self.assertIn("--build-arg COMPONENT_VERSION=" + version, (ROOT / "scripts/publish-ec2-candidate.sh").read_text())
+
     def test_manifest_creation_binds_the_exact_migration_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
             migration = pathlib.Path(directory) / "001_loops.sql"

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd -P)"
-if [[ "$(uname -s)" == Darwin && -x /opt/homebrew/opt/node@24/bin/node ]]; then
+if [[ -n "${LIFE2_NODE_BIN_DIR:-}" ]]; then
+  export PATH="$LIFE2_NODE_BIN_DIR:$PATH"
+elif [[ "$(uname -s)" == Darwin && -x /opt/homebrew/opt/node@24/bin/node ]]; then
   export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
 fi
 [[ "$(node -p 'process.versions.node.split(".")[0]')" == 24 && "$(npm --version | cut -d. -f1)" == 11 ]] || {

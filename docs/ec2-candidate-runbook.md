@@ -267,3 +267,7 @@ legacy name-only migration ledger is bridged solely for the five reviewed exact
 SQL digests; unknown or modified migrations remain rejected. Install the reviewed
 host contract update before staging this patch. No new tables or provider jobs
 are introduced. Preserve the accepted0.10.3 release and its captured ingress.
+
+For exact pinned local release validation, `LIFE2_NODE_BIN_DIR` may select the
+installed Node24.18.0/npm11.16.0 binary directory before CI. The existing major
+version guard remains active and immutable runtime images keep their digest pin.

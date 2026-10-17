@@ -103,7 +103,7 @@ def run_smoke(base, primary_file, foreign_file, *, expected_revision, expected_u
     _expect(*_request(base, "/health/ready", token=primary), 200)
     _expect(*_request(base, "/v1/task-lists", token=primary), 200)
     _expect(*_request(base, "/v1/loops", token="invalid"), 401)
-    if expected_version == "0.10.3":
+    if expected_version in ("0.10.3", "0.10.4"):
         browser_acceptance(base, primary)
     marker = "Release candidate " + expected_revision[:12] + " " + secrets.token_hex(4)
     created = _expect(*_request(
@@ -126,7 +126,7 @@ def run_smoke(base, primary_file, foreign_file, *, expected_revision, expected_u
         ), 200)
         if changed.get("data", {}).get("outcome") != "Candidate tenant isolation verified":
             raise ValueError("candidate Loop update did not persist")
-        if expected_version in ("0.10.1", "0.10.2", "0.10.3"):
+        if expected_version in ("0.10.1", "0.10.2", "0.10.3", "0.10.4"):
             comment = _expect(*_request(base, path + "/comments", method="POST", token=primary, payload={"content": "Release comment persistence verified"}), 201)
             if comment.get("data", {}).get("content") != "Release comment persistence verified":
                 raise ValueError("candidate comment did not persist")
@@ -140,7 +140,7 @@ def run_smoke(base, primary_file, foreign_file, *, expected_revision, expected_u
         closed = result.get("data", {}).get("status") == "closed"
         if not closed:
             raise ValueError("candidate Loop close did not persist")
-        if expected_version in ("0.10.1", "0.10.2", "0.10.3"):
+        if expected_version in ("0.10.1", "0.10.2", "0.10.3", "0.10.4"):
             _expect(*_request(base, path + "/comments", method="POST", token=primary, payload={"content": "Closed Loop must reject this comment"}), 409)
     finally:
         if not closed:

@@ -116,3 +116,12 @@ class RetainedUpgradeBaselineTest(unittest.TestCase):
         for rejected in (changed, {**accepted, "version": "0.10.2"}, {**accepted, "schemaVersion": 3}):
             with self.assertRaises(host_candidate.CandidateFailure):
                 host_candidate.expected_baseline_tables(rejected, migrations)
+
+
+class PatchUpgradeBaselineTest(unittest.TestCase):
+    def test_current_0103_baseline_requires_exact_migration_checksums(self):
+        migrations = {name: "a" * 64 for name in host_candidate.UPGRADE_MIGRATIONS}
+        accepted = {"schemaVersion": 2, "version": "0.10.3", "migrations": migrations}
+        self.assertEqual(host_candidate.expected_baseline_tables(accepted, migrations), 6)
+        with self.assertRaises(host_candidate.CandidateFailure):
+            host_candidate.expected_baseline_tables({**accepted, "migrations": {**migrations, "005_loop_asset_references.sql": "b" * 64}}, migrations)

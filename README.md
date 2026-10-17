@@ -559,3 +559,10 @@ Start at [docs/README.md](docs/README.md) for requirements, architecture, ADRs,
 API/Alexa setup, implementation methodology, and the durable implementation
 log. The source prompt is preserved unchanged under
 `docs/implementation/prompts/`.
+
+### 0.10.4 maintenance release
+
+The checksum bridge accepts only the five reviewed legacy migration digests.
+The EC2 patch path supports the retained0.10.3 baseline with byte-identical
+migrations and requires the same restored backup, real tenant acceptance,
+exact public revision and ingress rollback evidence. See the EC2 candidate runbook.

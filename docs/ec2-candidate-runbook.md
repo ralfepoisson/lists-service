@@ -257,3 +257,13 @@ release and backup artifacts. Active 0.10.1 remains live throughout candidate
 validation and is the captured-route rollback target for the patch.
 
 The 0.10.3 repair gives the dedicated backup role SELECT on identity sequences, including future migrator-owned sequences. It grants no sequence usage or update rights. Existing installations apply the same fixed `BACKUP_SEQUENCE_GRANTS` as the migration owner before the guarded archive and restore gate. Browser preflight permits only `https://app.life-sqrd.com`, supported REST methods and Authorization/Content-Type; actual business requests still require bearer authentication and tenant ownership.
+
+## 0.10.4 checksum bridge patch
+
+The 0.10.4 release accepts the retained 0.10.3 schema-2 baseline only when all
+five migration checksums match exactly. It preserves provenance, backup/restore,
+real two-tenant provider/persistence acceptance and ingress rollback gates. The
+legacy name-only migration ledger is bridged solely for the five reviewed exact
+SQL digests; unknown or modified migrations remain rejected. Install the reviewed
+host contract update before staging this patch. No new tables or provider jobs
+are introduced. Preserve the accepted0.10.3 release and its captured ingress.

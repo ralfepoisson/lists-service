@@ -1,3 +1,5 @@
+import jwt from 'jsonwebtoken';
+import { createSessionGuard } from '../adapters/rest/account-session.cjs';
 import { CompositeRestAuthenticator } from '../adapters/rest/CompositeRestAuthenticator.js';
 import { Life2JwtRestAuthenticator } from '../adapters/rest/Life2JwtRestAuthenticator.js';
 import { RestApiController } from '../adapters/rest/RestApiController.js';
@@ -134,6 +136,17 @@ export class RestControllerFactory {
         } catch {
           return false;
         }
+      },
+      async (request) => {
+        const guard = createSessionGuard({
+          key: Buffer.from(life2SigningKey, 'base64'),
+          verifyJwt: jwt.verify
+        });
+        await guard.authorize({
+          authorization: request.headers['authorization'],
+          method: request.method,
+          path: request.path
+        });
       }
     );
   }

@@ -575,3 +575,19 @@ Todoist read and excludes the business-API data/meta envelope. The maintenance
 release accepts the retained 0.10.4 baseline only with identical migration
 checksums; backup/restore, two-tenant acceptance and ingress rollback gates remain
 required. No UI or database schema changes are needed.
+
+## Current account session enforcement
+
+The deployed HTTP runtime verifies the normal Life2 signature and resolves every
+user bearer against the fixed Auth `/api/session/resolve` endpoint before private
+business routes. Current account membership/version must match and the account
+role must be `ADMIN`; limited roles, stale/removed sessions and resolver outages
+fail closed. `LIFE2_AUTH_BASE_URL` configures one trusted HTTP(S) origin (local
+`http://auth-api:46137`; default production Auth origin). No cache or runtime bypass
+is provided. Existing public metadata and explicitly verified OAuth/machine routes
+keep their separate authentication. Offline library/domain constructors are narrow
+test boundaries; deployed runtime entrypoints install the guard unconditionally.
+
+The standalone vendored client is generated from Auth shared/account-access; its
+SHA256 and runtime entrypoint are listed in the workspace `targets.json` and
+`copies.sha256.json`. No user/domain tables or provider credentials are added.

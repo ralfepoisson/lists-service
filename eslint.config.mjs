@@ -5,7 +5,14 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: ['coverage/**', 'dist/**', 'node_modules/**']
+    ignores: [
+      'coverage/**',
+      'dist/**',
+      'node_modules/**',
+      // Generated canonical clients are verified through the shared SHA manifest.
+      'src/adapters/rest/account-session.cjs',
+      'src/adapters/rest/account-session.d.cts'
+    ]
   },
   eslint.configs.recommended,
   {

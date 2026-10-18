@@ -42,7 +42,8 @@ export class RestApiController {
     private readonly taskListServices: TenantTaskListServiceProvider,
     private readonly loopService: LoopService,
     private readonly tagService: TagService,
-    private readonly heartbeatCheck: HeartbeatCheck
+    private readonly heartbeatCheck: HeartbeatCheck,
+    private readonly accountAccess?: (request: RestRequest) => Promise<void>
   ) {}
 
   async handle(request: RestRequest): Promise<RestResponse> {
@@ -116,8 +117,21 @@ export class RestApiController {
           request.requestId
         );
       }
+      if (principal.authMethod === 'life2' && this.accountAccess) await this.accountAccess(request);
       return await this.routeAuthenticated(request, principal);
     } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'status' in error &&
+        typeof error.status === 'number' &&
+        [401, 403, 502, 503].includes(error.status)
+      )
+        return this.error(
+          error.status,
+          error.status === 401 ? 'SESSION_INVALID' : 'ACCOUNT_ACCESS_DENIED',
+          error.message,
+          request.requestId
+        );
       if (error instanceof ApplicationError) {
         return this.error(error.httpStatus, error.code, error.message, request.requestId);
       }

@@ -126,7 +126,6 @@ tenants), and a post-activation signed-in Loop flow. Preserve the 0.8.0 Lambda
 alias until those gates pass. A public heartbeat or anonymous 401 alone does
 not establish Loops persistence or tenant safety.
 
-
 ## Membership enforcement patch 0.10.6
 
 Release0.10.6 resolves current Auth membership for private Life2 requests before

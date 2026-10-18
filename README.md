@@ -566,3 +566,12 @@ The checksum bridge accepts only the five reviewed legacy migration digests.
 The EC2 patch path supports the retained0.10.3 baseline with byte-identical
 migrations and requires the same restored backup, real tenant acceptance,
 exact public revision and ingress rollback evidence. See the EC2 candidate runbook.
+
+### 0.10.5 heartbeat contract correction
+
+The public heartbeat returns exactly top-level `status` and `component` fields,
+with HTTP 200 for healthy and 503 for unhealthy. It retains the bounded real
+Todoist read and excludes the business-API data/meta envelope. The maintenance
+release accepts the retained 0.10.4 baseline only with identical migration
+checksums; backup/restore, two-tenant acceptance and ingress rollback gates remain
+required. No UI or database schema changes are needed.

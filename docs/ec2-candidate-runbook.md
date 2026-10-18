@@ -1,3 +1,11 @@
+# 0.10.5 maintenance acceptance
+
+The 0.10.5 release corrects only heartbeat serialization. Its schema-2 manifest
+accepts a retained 0.10.4 baseline only when all five migration checksums match.
+Candidate and public acceptance require the exact top-level healthy heartbeat
+shape; restored backup, authenticated Todoist/Loop/comment operations, tenant
+isolation and captured Apache rollback gates are unchanged.
+
 # Guarded EC2 Lists release and upgrade
 
 ## Current 0.10.3 upgrade contract

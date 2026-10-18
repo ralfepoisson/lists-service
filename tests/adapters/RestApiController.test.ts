@@ -497,8 +497,8 @@ describe('RestApiController', () => {
 
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body)).toEqual({
-      data: { status: 'healthy', component: 'lists-service' },
-      meta: { requestId: 'request-1' }
+      status: 'healthy',
+      component: 'lists-service'
     });
     expect(fixture.requestedTenantIds).toEqual(['account-123']);
   });
@@ -513,8 +513,8 @@ describe('RestApiController', () => {
 
     expect(response.statusCode).toBe(503);
     expect(JSON.parse(response.body)).toEqual({
-      data: { status: 'unhealthy', component: 'lists-service' },
-      meta: { requestId: 'request-1' }
+      status: 'unhealthy',
+      component: 'lists-service'
     });
   });
 
@@ -527,7 +527,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body)).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.10.4',
+        version: '0.10.5',
         revision: 'lists-test-revision'
       });
     } finally {

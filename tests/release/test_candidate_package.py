@@ -127,6 +127,15 @@ class PatchUpgradeBaselineTest(unittest.TestCase):
             host_candidate.expected_baseline_tables({**accepted, "migrations": {**migrations, "005_loop_asset_references.sql": "b" * 64}}, migrations)
 
 
+class HeartbeatPatchUpgradeBaselineTest(unittest.TestCase):
+    def test_current_0104_baseline_requires_exact_migration_checksums(self):
+        migrations = {name: "a" * 64 for name in host_candidate.UPGRADE_MIGRATIONS}
+        accepted = {"schemaVersion": 2, "version": "0.10.4", "migrations": migrations}
+        self.assertEqual(host_candidate.expected_baseline_tables(accepted, migrations), 6)
+        with self.assertRaises(host_candidate.CandidateFailure):
+            host_candidate.expected_baseline_tables({**accepted, "migrations": {**migrations, "005_loop_asset_references.sql": "b" * 64}}, migrations)
+
+
 class PublicReloadAcceptanceTest(unittest.TestCase):
     def test_graceful_reload_must_eventually_pass_the_complete_acceptance(self):
         from unittest.mock import Mock

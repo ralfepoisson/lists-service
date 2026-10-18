@@ -1,3 +1,13 @@
+## 2026-10-18 — Correct mandatory heartbeat serialization (0.10.5)
+
+LST-FUN-010 / LST-API-001: the public heartbeat now returns exact top-level
+`status` and `component`, retaining the real bounded deployment-bound Todoist
+read and HTTP200/503 behavior. Controller red: 2 failed,31 passed. Release red:
+33 tests,1failure,1error,3skipped for new patch identity/retained0.10.4 baseline.
+Only identical migration checksums admit that baseline; no schema/UI changes.
+Full release validation and live acceptance are recorded in the workspace
+`docs/implementation/entries/2026-10-18-production-operations-audit--codex.md`.
+
 # Implementation Log
 
 This is the durable, newest-first engineering record for `lists-service`.

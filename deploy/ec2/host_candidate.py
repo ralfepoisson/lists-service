@@ -223,7 +223,7 @@ def _verify_image(manifest):
 def expected_baseline_tables(baseline, migrations):
     if baseline.get("schemaVersion") == 1 and baseline.get("version") == "0.9.0" and baseline.get("migrationSha256") == migrations.get("001_loops.sql"):
         return 3
-    if baseline.get("schemaVersion") == 2 and baseline.get("version") in ("0.10.1", "0.10.3") and baseline.get("migrations") == migrations:
+    if baseline.get("schemaVersion") == 2 and baseline.get("version") in ("0.10.1", "0.10.3", "0.10.4") and baseline.get("migrations") == migrations:
         return 6
     raise CandidateFailure("retained Lists schema or checksums are not an accepted upgrade baseline")
 
@@ -232,7 +232,7 @@ def _retained_ingress_network(manifest):
     from candidate_smoke import _request, _expect
     identity = _expect(*_request("https://lists.life-sqrd.com", "/version"), 200)
     sha = identity.get("revision")
-    if identity.get("version") not in ("0.9.0", "0.10.1", "0.10.3") or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+    if identity.get("version") not in ("0.9.0", "0.10.1", "0.10.3", "0.10.4") or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise CandidateFailure("upgrade requires retained public provenance")
     previous = APP_ROOT / "releases" / sha
     _trusted_file(previous / "release.json", 0o600)
@@ -416,7 +416,7 @@ def activate_upgrade(sha):
     _trusted_file(site, 0o644)
     previous = site.read_bytes()
     before = _expect(*_request("https://lists.life-sqrd.com", "/version"), 200)
-    if before.get("version") not in ("0.9.0", "0.10.1", "0.10.3") or not isinstance(before.get("revision"), str) or not re.fullmatch(r"[0-9a-f]{40}", before["revision"]):
+    if before.get("version") not in ("0.9.0", "0.10.1", "0.10.3", "0.10.4") or not isinstance(before.get("revision"), str) or not re.fullmatch(r"[0-9a-f]{40}", before["revision"]):
         raise CandidateFailure("upgrade requires the retained accepted public baseline")
     previous_manifest = APP_ROOT / "releases" / before.get("revision", "invalid") / "release.json"
     _trusted_file(previous_manifest, 0o600)

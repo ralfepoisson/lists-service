@@ -91,11 +91,10 @@ export class RestApiController {
       }
       if (request.method === 'GET' && request.path === '/health/heartbeat') {
         const healthy = await this.heartbeatCheck();
-        return this.success(
-          healthy ? 200 : 503,
-          { status: healthy ? 'healthy' : 'unhealthy', component: 'lists-service' },
-          request.requestId
-        );
+        return this.response(healthy ? 200 : 503, {
+          status: healthy ? 'healthy' : 'unhealthy',
+          component: 'lists-service'
+        });
       }
       if (request.method === 'GET' && request.path === '/version') {
         return this.response(200, {

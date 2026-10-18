@@ -62,7 +62,7 @@ class ReleaseContractTest(unittest.TestCase):
             )
             ec2_contract.validate_manifest(manifest)
             self.assertEqual(manifest["schemaVersion"], 2)
-            self.assertEqual(manifest["version"], "0.10.5")
+            self.assertEqual(manifest["version"], "0.10.6")
             self.assertEqual(set(manifest["migrations"]), set(ec2_contract.UPGRADE_MIGRATIONS))
             with self.assertRaises(ValueError):
                 ec2_contract.validate_manifest(manifest | {"migrations": {"001_loops.sql": "c" * 64}})

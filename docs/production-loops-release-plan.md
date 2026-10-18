@@ -125,3 +125,14 @@ gates, direct authenticated candidate acceptance (including denial across
 tenants), and a post-activation signed-in Loop flow. Preserve the 0.8.0 Lambda
 alias until those gates pass. A public heartbeat or anonymous 401 alone does
 not establish Loops persistence or tenant safety.
+
+
+## Membership enforcement patch 0.10.6
+
+Release0.10.6 resolves current Auth membership for private Life2 requests before
+provider or database operations. Activate only after Auth exposes the real
+`/api/session/resolve` contract. The immutable publisher, image and upgrade
+manifest carry0.10.6 consistently. The trusted candidate retains0.10.5 as an
+accepted baseline only when all five migration checksums match exactly. No
+schema migration is introduced by this patch; backup/restore, real authenticated
+acceptance and rollback checks still apply.

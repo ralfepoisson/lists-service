@@ -1,3 +1,13 @@
+# 0.10.6 membership enforcement acceptance
+
+Activate after the production Auth session resolver is live. The0.10.6 image,
+publisher and schema-2 manifest share the package version. A retained0.10.5
+baseline is accepted only when all five migration checksums match exactly.
+Candidate/public gates retain heartbeat shape, browser preflight, real Todoist
+reads, Loop/comment persistence, tenant isolation, backup/restore and Apache
+rollback acceptance. Host tools must be installed from the reviewed commit
+before staging the new release.
+
 # 0.10.5 maintenance acceptance
 
 The 0.10.5 release corrects only heartbeat serialization. Its schema-2 manifest

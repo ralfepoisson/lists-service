@@ -153,3 +153,12 @@ class PublicReloadAcceptanceTest(unittest.TestCase):
                 host_candidate.wait_for_public_acceptance(accept, attempts=3)
         self.assertEqual(accept.call_count, 3)
         self.assertEqual(sleep.call_count, 2)
+
+
+class MembershipPatchUpgradeBaselineTest(unittest.TestCase):
+    def test_current_0105_baseline_requires_exact_migration_checksums(self):
+        migrations = {name: "a" * 64 for name in host_candidate.UPGRADE_MIGRATIONS}
+        accepted = {"schemaVersion": 2, "version": "0.10.5", "migrations": migrations}
+        self.assertEqual(host_candidate.expected_baseline_tables(accepted, migrations), 6)
+        with self.assertRaises(host_candidate.CandidateFailure):
+            host_candidate.expected_baseline_tables({**accepted, "migrations": {**migrations, "005_loop_asset_references.sql": "b" * 64}}, migrations)

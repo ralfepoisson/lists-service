@@ -41,6 +41,16 @@ export class TenantTodoistConnectionCatalog {
     };
   }
 
+  async projectFor(
+    accountId: string
+  ): Promise<{ readonly shoppingProjectId?: string; readonly shoppingProjectName?: string }> {
+    const connection = (await this.connections()).get(accountId);
+    if (!connection) throw new TodoistNotConnectedError();
+    return connection.shoppingProjectId === undefined
+      ? { shoppingProjectName: connection.shoppingProjectName as string }
+      : { shoppingProjectId: connection.shoppingProjectId };
+  }
+
   private connections(): Promise<ReadonlyMap<string, TenantConnection>> {
     this.connectionsPromise ??= this.load();
     return this.connectionsPromise;

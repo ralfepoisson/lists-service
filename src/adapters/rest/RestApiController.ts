@@ -49,7 +49,12 @@ export class RestApiController {
   async handle(request: RestRequest): Promise<RestResponse> {
     const applicationOrigin = 'https://app.life-sqrd.com';
     const allowedMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
-    const allowedHeaders = ['authorization', 'content-type'];
+    const allowedHeaders = [
+      'authorization',
+      'content-type',
+      'if-match',
+      'x-confirm-destructive-action'
+    ];
     const originAllowed = request.headers['origin'] === applicationOrigin;
     if (request.method === 'OPTIONS' && request.path.startsWith('/v1/')) {
       const requestedHeaders = (request.headers['access-control-request-headers'] ?? '')
@@ -68,7 +73,8 @@ export class RestApiController {
         headers: {
           'access-control-allow-origin': applicationOrigin,
           'access-control-allow-methods': allowedMethods.join(', '),
-          'access-control-allow-headers': 'Authorization, Content-Type',
+          'access-control-allow-headers':
+            'Authorization, Content-Type, If-Match, X-Confirm-Destructive-Action',
           vary: 'Origin'
         },
         body: ''
@@ -183,6 +189,29 @@ export class RestApiController {
         request.requestId
       );
     }
+    if (request.path === '/v1/todoist/connection' && request.method === 'PUT') {
+      const owner = this.requireLife2Principal(principal);
+      if (!this.taskListServices.saveConnection) throw new AuthorizationForbiddenError();
+      const body = this.parseObjectBody(request.body);
+      if (
+        Object.keys(body).some((key) => !['apiToken', 'expectedVersion'].includes(key)) ||
+        typeof body['apiToken'] !== 'string'
+      )
+        throw new ValidationError('Supply only an API token and current connection version.');
+      const version = body['expectedVersion'];
+      if (!Number.isSafeInteger(version) || (version as number) < 0)
+        throw new ValidationError('Reload the current connection version before saving.');
+      return this.success(
+        200,
+        await this.taskListServices.saveConnection(
+          owner.accountId,
+          owner.sub,
+          body['apiToken'],
+          version as number
+        ),
+        request.requestId
+      );
+    }
     if (
       request.path === '/v1/tags' ||
       request.path.startsWith('/v1/tags/') ||
@@ -198,10 +227,18 @@ export class RestApiController {
       );
     }
     if (request.path === '/v1/todoist/connection' && request.method === 'DELETE') {
-      this.requireLife2Principal(principal);
-      throw new AuthorizationForbiddenError(
-        'Todoist connections are managed through the server-side tenant connection catalogue.'
-      );
+      const owner = this.requireLife2Principal(principal);
+      if (!this.taskListServices.disconnectConnection) throw new AuthorizationForbiddenError();
+      const version = request.headers['if-match'];
+      if (
+        request.headers['x-confirm-destructive-action'] !== 'true' ||
+        !version ||
+        !/^(0|[1-9][0-9]*)$/u.test(version) ||
+        !Number.isSafeInteger(Number(version))
+      )
+        throw new ValidationError('Confirm disconnection with the current connection version.');
+      await this.taskListServices.disconnectConnection(owner.accountId, owner.sub, Number(version));
+      return { statusCode: 204, headers: { 'cache-control': 'no-store' }, body: '' };
     }
     if (request.path === '/v1/loops' || request.path.startsWith('/v1/loops/')) {
       const life2Principal = this.requireLife2Principal(principal);

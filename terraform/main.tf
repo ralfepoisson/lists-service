@@ -236,6 +236,7 @@ locals {
     "POST /v1/items/{itemId}/complete",
     "POST /v1/items/{itemId}/reopen",
     "GET /v1/todoist/connection",
+    "PUT /v1/todoist/connection",
     "POST /v1/todoist/connection/authorizations",
     "DELETE /v1/todoist/connection",
     "GET /v1/task-lists",

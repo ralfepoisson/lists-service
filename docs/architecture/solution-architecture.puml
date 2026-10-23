@@ -217,4 +217,11 @@ note right of UseCases
 end note
 
 note "Email agents call tenant-owned Task Lists only.\nCreate/comment UUID Idempotency-Key becomes Todoist X-Request-Id.\nComments verify current task/list membership; tokens stay in Lists." as EmailDispatch
+component "TodoistConnectionManagement\nwrite-only Save + confirmed Disconnect\noptimistic version; no provider validation" as ConnectionManagement
+database "lists_todoist_connections\naccount-bound AES-GCM override / tombstone" as ConnectionOverrides
+RestAdapter --> ConnectionManagement : verified Life2 account + subject
+ConnectionManagement --> ConnectionOverrides
+ConnectionManagement --> SecretProvider : dedicated encryption key reference
+TodoistClient --> ConnectionManagement : resolve current token before each request/retry
+ConnectionManagement --> TenantCatalog : fallback only when no override exists
 @enduml

@@ -156,3 +156,19 @@ from Todoist's inverse API scale without modifying provider task priority.
 `tests/adapters/TodoistTaskListRepository.test.ts` covers all four values,
 omitted completed-history priority and malformed values. Unit verification does
 not claim real-provider or deployed acceptance.
+
+## Approved Profile management correction (23 October 2026)
+
+- **CONNECTION-01:** Existing catalogue tenants may privately replace credentials
+  through authenticated write-only management; never return or log a token.
+- **CONNECTION-02:** Confirmed disconnection clears replacement credentials and
+  durably suppresses catalogue fallback without deleting provider tasks/history.
+- **CONNECTION-03:** Enforce account isolation/current membership and optimistic
+  versions; no automatic provider validation during save. New credentials are
+  explicitly unverified. Retained clients recheck before each request/retry.
+- **CONNECTION-04:** Preserve server-owned project selection; do not silently
+  provision a replacement account's Shopping project.
+
+Implementation: migration006/application manager/Postgres adapter/REST composition.
+Evidence: focused REST/crypto/dynamic-token tests and disposable PostgreSQL suite;
+real provider credential replacement/disconnection intentionally not exercised.

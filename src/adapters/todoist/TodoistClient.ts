@@ -4,7 +4,7 @@ import type { Sleeper } from './ports/Sleeper.js';
 
 export interface TodoistClientOptions {
   readonly baseUrl: string;
-  readonly token: string;
+  readonly token: string | (() => Promise<string>);
   readonly transport: HttpTransport;
   readonly sleeper: Sleeper;
   readonly maximumAttempts: number;
@@ -94,10 +94,12 @@ export class TodoistClient {
   ): Promise<Response> {
     const attempts = allowRetry ? this.options.maximumAttempts : 1;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const token =
+        typeof this.options.token === 'function' ? await this.options.token() : this.options.token;
       let response: Response;
       try {
         response = await this.options.transport.send(
-          this.createRequest(method, path, body, isForm, idempotencyKey)
+          this.createRequest(method, path, body, isForm, idempotencyKey, token)
         );
       } catch (error: unknown) {
         if (allowRetry && attempt < attempts) {
@@ -129,11 +131,12 @@ export class TodoistClient {
     path: string,
     body: string | undefined,
     isForm = false,
-    idempotencyKey?: string
+    idempotencyKey?: string,
+    token?: string
   ): HttpRequest {
     const headers: Record<string, string> = {
       Accept: 'application/json',
-      Authorization: `Bearer ${this.options.token}`,
+      Authorization: `Bearer ${token}`,
       'User-Agent': 'Life2-Lists-Service/0.1'
     };
     if (idempotencyKey !== undefined) headers['X-Request-Id'] = idempotencyKey;

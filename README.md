@@ -83,8 +83,8 @@ endpoint is disabled.
 The service repository includes authenticated transient PDF rendering but
 deliberately excludes an owned web/mobile UI. The separate Life2 webapp consumes
 its REST and PDF contracts. Version 1 still excludes Alexa's built-in
-shopping list, deprecated Alexa List Management APIs, browser-managed Todoist
-onboarding or disconnection, LLM matching, product lookup, purchasing, scanning,
+shopping list, deprecated Alexa List Management APIs, browser-managed Todoist OAuth
+onboarding, LLM matching, product lookup, purchasing, scanning,
 meal planning, and inventory management.
 
 Todoist completed-item operations cover the configured rolling history window,
@@ -591,3 +591,44 @@ test boundaries; deployed runtime entrypoints install the guard unconditionally.
 The standalone vendored client is generated from Auth shared/account-access; its
 SHA256 and runtime entrypoint are listed in the workspace `targets.json` and
 `copies.sha256.json`. No user/domain tables or provider credentials are added.
+
+## Profile Todoist management (local implementation)
+
+Profile → Connections → Todoist → Manage accepts a write-only replacement API
+ token for an existing server-catalogued account, and confirms disconnection.
+`PUT /v1/todoist/connection` accepts only `{apiToken, expectedVersion}`;
+`DELETE` requires `X-Confirm-Destructive-Action: true` and the current numeric
+`If-Match` version. Life2 session/account membership is checked first; automation
+and email-agent credentials cannot manage the connection. GET never returns a
+key. Saving encrypts the token and reports `saved_unverified`: it makes no
+Todoist request and does not validate access or change provider data.
+
+The optional `TODOIST_CONNECTION_KEY_SECRET_ARN` references a dedicated base64
+32-byte AES-256-GCM key in the existing file/AWS secret backend. Migration006
+adds only encrypted overrides, version and audit subject. No catalogue credentials
+are copied or overwritten. A disconnect persists a null-ciphertext tombstone;
+it suppresses catalogue fallback across restarts, preserves tasks/history and
+clears any replacement token. It stops subsequent Life2 provider requests; it
+does not revoke the provider token at Todoist or undo an in-flight request.
+
+Optimistic versions reject stale Save/Disconnect with409. Reconnect requires a
+new token; no automatic catalogue resurrection. The catalogue still owns Shopping
+project identity. Replacement tokens must access that existing project; name-only
+Shopping selection resolves an existing unique project and never creates one
+with a replacement credential. An absent catalogue entry remains administrator
+provisioned; this feature does not add OAuth onboarding or arbitrary project choice.
+
+Every retained Todoist client resolves the current credential before each request
+and retry. REST and Alexa deployments must share the same database/key when
+management is activated; never roll out only one channel while expecting global
+revocation. Existing deployments without the key remain read-only catalogue
+management (`canManageConnection:false`). This task changes local development,
+not the current production release or Alexa deployment.
+
+Database-enabled releases always read connection overrides even if the management
+key is removed: ciphertext becomes unavailable and tombstones still block the
+catalogue credential. A missing key never restores an older token. Preserve the
+dedicated key and migration006 rows for backup/restore. Do not roll back to a
+legacy release that ignores overrides after a disconnect; retain a compatible
+release or first apply an explicitly reviewed server-side catalogue revocation.
+Never drop tombstones as routine rollback or cleanup.

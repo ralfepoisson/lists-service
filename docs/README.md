@@ -38,6 +38,8 @@ unverified real boundaries until separately exercised.
 - [ADR 0005: Tenant Todoist projects as task lists](decisions/0005-tenant-todoist-projects-as-task-lists.md)
 - [ADR 0007: Lists-owned Loops](decisions/0007-lists-owned-loops.md)
 
+- [ADR 0008: Write-only Todoist management](decisions/0008-write-only-todoist-management.md)
+
 ## Source specification
 
 - [Initial Todoist/Alexa implementation prompt](implementation/prompts/codex-prompt-todoist-alexa-shopping-list.md)

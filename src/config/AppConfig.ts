@@ -13,7 +13,8 @@ export class AppConfig {
     readonly todoistApiBaseUrl: string,
     readonly completedLookbackDays: number,
     readonly secretProvider: 'aws' | 'file',
-    readonly databaseUrl: string | undefined
+    readonly databaseUrl: string | undefined,
+    readonly todoistConnectionKeySecretArn: string | undefined
   ) {}
 
   static fromRestEnvironment(environment: Environment): AppConfig {
@@ -89,7 +90,9 @@ export class AppConfig {
       this.optionalValue(environment, 'TODOIST_API_BASE_URL') ?? 'https://api.todoist.com/api/v1';
     const secretProvider = this.parseSecretProvider(environment['SECRET_PROVIDER']);
     const databaseUrl =
-      channel === 'rest' ? this.requireValue(environment, 'DATABASE_URL') : undefined;
+      channel === 'rest'
+        ? this.requireValue(environment, 'DATABASE_URL')
+        : this.optionalValue(environment, 'DATABASE_URL');
 
     return new AppConfig(
       restApiTokenSecretArn,
@@ -101,7 +104,8 @@ export class AppConfig {
       todoistApiBaseUrl,
       completedLookbackDays,
       secretProvider,
-      databaseUrl
+      databaseUrl,
+      this.optionalValue(environment, 'TODOIST_CONNECTION_KEY_SECRET_ARN')
     );
   }
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Life2 Lists Service REST API
-  version: 0.10.6
+  version: 0.11.0
   description: |
     Todoist remains the system of record. Shopping resolves the authenticated
     principal's verified or deployment-bound account through the tenant catalogue.
@@ -35,7 +35,7 @@ tags:
   - name: Workspace Search
     description: Internal normalized search provider for the Life2 workspace BFF.
   - name: Todoist Connection
-    description: Credential-free status for the acting Life2 tenant's server-managed connection.
+    description: Credential-free tenant status, write-only token replacement, and confirmed disconnection.
 security:
   - bearerAuth: []
 paths:
@@ -156,14 +156,52 @@ paths:
               schema: { $ref: '#/components/schemas/TodoistConnectionResponse' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
-    delete:
-      operationId: disconnectTodoist
-      summary: Request removal of the Todoist connection
-      description: Server-managed catalogue connections cannot be changed through this API.
+    put:
+      operationId: saveTodoistConnection
+      summary: Save an encrypted write-only replacement token without contacting Todoist
+      description: Existing server-catalogued Life2 accounts only. Save reports unverified access; it never echoes the token. Stale versions are rejected.
       tags: [Todoist Connection]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [apiToken, expectedVersion]
+              properties:
+                apiToken: { type: string, minLength: 8, maxLength: 4096, writeOnly: true }
+                expectedVersion: { type: integer, minimum: 0 }
       responses:
+        '200':
+          description: Encrypted locally; provider access unverified.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TodoistConnectionResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: Connection changed; reload current settings. }
+    delete:
+      operationId: disconnectTodoist
+      summary: Disable Life2 access and clear any replacement token
+      description: Durable account-bound tombstone suppresses catalogue fallback; provider tasks/history and original protected catalogue secret remain unchanged. Does not revoke the provider token or undo in-flight requests.
+      tags: [Todoist Connection]
+      parameters:
+        - in: header
+          name: X-Confirm-Destructive-Action
+          required: true
+          schema: { type: string, const: 'true' }
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+      responses:
+        '204': { description: Life2 access disconnected; provider data preserved. }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: Connection changed; reload current settings. }
   /v1/todoist/connection/authorizations:
     post:
       operationId: startTodoistAuthorization
@@ -1337,7 +1375,10 @@ components:
           required: [status, canManageConnection]
           properties:
             status: { type: string, enum: [connected, not_connected] }
-            canManageConnection: { type: boolean, const: false }
+            canManageConnection: { type: boolean }
+            version: { type: integer, minimum: 0 }
+            managementMode: { type: string, const: profile_token }
+            credentialStatus: { type: string, enum: [server_configured, saved_unverified] }
         meta: { $ref: '#/components/schemas/Meta' }
     TaskListTask:
       type: object

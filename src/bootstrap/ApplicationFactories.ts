@@ -1,3 +1,5 @@
+import { TodoistConnectionManagement } from '../application/TodoistConnectionManagement.js';
+import { PostgresTodoistConnectionStore } from '../adapters/postgres/PostgresTodoistConnectionStore.js';
 import jwt from 'jsonwebtoken';
 import { createSessionGuard } from '../adapters/rest/account-session.cjs';
 import { CompositeRestAuthenticator } from '../adapters/rest/CompositeRestAuthenticator.js';
@@ -25,7 +27,7 @@ import type {
   TodoistConnectionStatus
 } from '../application/ports/TenantTaskListServiceProvider.js';
 import type { AppConfig } from '../config/AppConfig.js';
-import { TodoistNotConnectedError } from '../domain/errors.js';
+import { AuthorizationForbiddenError, TodoistNotConnectedError } from '../domain/errors.js';
 
 export class TenantTaskListServiceFactory implements TenantTaskListServiceProvider {
   private readonly catalog: TenantTodoistConnectionCatalog | undefined;
@@ -33,7 +35,8 @@ export class TenantTaskListServiceFactory implements TenantTaskListServiceProvid
   constructor(
     private readonly config: AppConfig,
     private readonly secrets: SecretProvider,
-    catalogSecretRef: string | undefined
+    catalogSecretRef: string | undefined,
+    private readonly management?: TodoistConnectionManagement
   ) {
     this.catalog =
       catalogSecretRef === undefined
@@ -42,10 +45,49 @@ export class TenantTaskListServiceFactory implements TenantTaskListServiceProvid
   }
 
   async connectionStatus(accountId: string): Promise<TodoistConnectionStatus> {
+    const registered = await this.requiredCatalog().has(accountId);
+    const managed =
+      this.management && registered ? await this.management.status(accountId) : undefined;
     return {
-      status: (await this.requiredCatalog().has(accountId)) ? 'connected' : 'not_connected',
-      canManageConnection: false
+      status: registered && !managed?.disconnected ? 'connected' : 'not_connected',
+      canManageConnection: registered && (this.management?.canManage ?? false),
+      ...(managed
+        ? {
+            version: managed.version,
+            managementMode: 'profile_token' as const,
+            ...(!managed.disconnected
+              ? {
+                  credentialStatus: managed.replaced
+                    ? ('saved_unverified' as const)
+                    : ('server_configured' as const)
+                }
+              : {})
+          }
+        : {})
     };
+  }
+
+  async saveConnection(
+    accountId: string,
+    subject: string,
+    token: string,
+    version: number
+  ): Promise<TodoistConnectionStatus> {
+    await this.requireManagement(accountId);
+    await this.management!.save(accountId, subject, token, version);
+    return this.connectionStatus(accountId);
+  }
+  async disconnectConnection(accountId: string, subject: string, version: number): Promise<void> {
+    await this.requireManagement(accountId);
+    await this.management!.disconnect(accountId, subject, version);
+  }
+  private async requireManagement(accountId: string): Promise<void> {
+    if (!this.management?.canManage || !(await this.requiredCatalog().has(accountId)))
+      throw new AuthorizationForbiddenError('Todoist management is unavailable for this account.');
+  }
+  private async currentToken(accountId: string): Promise<string> {
+    const fallback = (): Promise<string> => this.requiredCatalog().tokenFor(accountId);
+    return this.management ? this.management.token(accountId, fallback) : fallback();
   }
 
   async forTenant(accountId: string): Promise<TaskListService> {
@@ -59,13 +101,15 @@ export class TenantTaskListServiceFactory implements TenantTaskListServiceProvid
     readonly shoppingList: ShoppingListService;
     readonly printService: ShoppingListPrintService;
   }> {
-    const connection = await this.requiredCatalog().connectionFor(accountId);
-    const client = this.clientForToken(connection.token);
+    const connection = await this.requiredCatalog().projectFor(accountId);
+    const client = this.clientForToken(() => this.currentToken(accountId));
+    const replaced = this.management && (await this.management.status(accountId)).replaced;
+    const resolver = new TodoistProjectResolver(client);
     const projectId =
       connection.shoppingProjectId ??
-      (await new TodoistProjectResolver(client).resolveOrCreate(
-        connection.shoppingProjectName as string
-      ));
+      (replaced
+        ? await resolver.resolveUnique(connection.shoppingProjectName as string)
+        : await resolver.resolveOrCreate(connection.shoppingProjectName as string));
     const shoppingList = new ShoppingListService(
       new TodoistShoppingListRepository(client, projectId, this.config.completedLookbackDays)
     );
@@ -76,11 +120,11 @@ export class TenantTaskListServiceFactory implements TenantTaskListServiceProvid
   }
 
   private async clientFor(accountId: string): Promise<TodoistClient> {
-    const token = await this.requiredCatalog().tokenFor(accountId);
-    return this.clientForToken(token);
+    if (!(await this.requiredCatalog().has(accountId))) throw new TodoistNotConnectedError();
+    return this.clientForToken(() => this.currentToken(accountId));
   }
 
-  private clientForToken(token: string): TodoistClient {
+  private clientForToken(token: string | (() => Promise<string>)): TodoistClient {
     return new TodoistClient({
       baseUrl: this.config.todoistApiBaseUrl,
       token,
@@ -112,7 +156,8 @@ export class RestControllerFactory {
     const tenantServices = new TenantTaskListServiceFactory(
       this.config,
       this.secrets,
-      this.config.todoistTenantCatalogSecretArn
+      this.config.todoistTenantCatalogSecretArn,
+      await createTodoistManagement(this.config, this.secrets)
     );
     const loopRepository = new PostgresLoopRepository(this.config.requiredDatabaseUrl());
     const tagRepository = new PostgresTagRepository(this.config.requiredDatabaseUrl());
@@ -150,4 +195,19 @@ export class RestControllerFactory {
       }
     );
   }
+}
+
+export async function createTodoistManagement(
+  config: AppConfig,
+  secrets: SecretProvider
+): Promise<TodoistConnectionManagement | undefined> {
+  if (!config.databaseUrl && !config.todoistConnectionKeySecretArn) return undefined;
+  const key = config.todoistConnectionKeySecretArn
+    ? Buffer.from(await secrets.getSecret(config.todoistConnectionKeySecretArn), 'base64')
+    : undefined;
+  // Always observe tombstones in a database-enabled deployment, even if the key is unavailable.
+  return new TodoistConnectionManagement(
+    new PostgresTodoistConnectionStore(config.requiredDatabaseUrl()),
+    key
+  );
 }

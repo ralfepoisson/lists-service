@@ -16,7 +16,8 @@ async function main(): Promise<void> {
     '002_lists_tags.sql',
     '003_loop_seed_identity.sql',
     '004_loop_comments.sql',
-    '005_loop_asset_references.sql'
+    '005_loop_asset_references.sql',
+    '006_todoist_connections.sql'
   ];
   const client = new Client({ connectionString: databaseUrl });
 

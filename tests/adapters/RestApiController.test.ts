@@ -140,7 +140,9 @@ describe('RestApiController', () => {
     );
     expect(preflight.statusCode).toBe(204);
     expect(preflight.headers['access-control-allow-origin']).toBe(origin);
-    expect(preflight.headers['access-control-allow-headers']).toBe('Authorization, Content-Type');
+    expect(preflight.headers['access-control-allow-headers']).toBe(
+      'Authorization, Content-Type, If-Match, X-Confirm-Destructive-Action'
+    );
     expect(preflight.headers['access-control-allow-credentials']).toBeUndefined();
     const unauthorized = await fixture.controller.handle(
       fixture.request({ path: '/v1/loops', headers: { origin } })
@@ -527,7 +529,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body)).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.10.6',
+        version: '0.11.0',
         revision: 'lists-test-revision'
       });
     } finally {

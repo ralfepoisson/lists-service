@@ -10,7 +10,11 @@ import type { ShoppingListService } from '../application/ShoppingListService.js'
 import type { OperationalLogger } from '../application/ports/OperationalLogger.js';
 import type { SecretProvider } from '../application/ports/SecretProvider.js';
 import { AppConfig } from '../config/AppConfig.js';
-import { RestControllerFactory, TenantTaskListServiceFactory } from './ApplicationFactories.js';
+import {
+  RestControllerFactory,
+  TenantTaskListServiceFactory,
+  createTodoistManagement
+} from './ApplicationFactories.js';
 
 class CompositionDependencies {
   readonly config: AppConfig;
@@ -32,7 +36,8 @@ class CompositionDependencies {
       await new TenantTaskListServiceFactory(
         this.config,
         this.secrets,
-        tenant.todoistTenantCatalogSecretArn
+        tenant.todoistTenantCatalogSecretArn,
+        await createTodoistManagement(this.config, this.secrets)
       ).shoppingForTenant(tenant.life2AllowedAccountId)
     ).shoppingList;
   }

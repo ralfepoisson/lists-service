@@ -240,3 +240,28 @@ Implementation must add evidence for:
 - real Todoist and private Alexa smoke tests.
 
 Until that evidence is recorded, the diagrams and flows are design intent only.
+
+## Write-only connection management
+
+The optional TodoistConnectionManagement application object overlays the existing
+catalogue with Lists-owned, account-bound AES-GCM ciphertext or a durable null
+ciphertext disconnection tombstone. A dedicated secret key is kept outside the
+repository/database. No token backfill occurs. REST requires Life2 membership,
+strict write-only payloads, optimistic versions, and disconnect confirmation.
+Current token resolution happens before every provider request/retry, including
+retained clients. A disconnected row never falls back to the catalogue.
+
+The catalogue retains Shopping project selection and unknown-tenant provisioning.
+Replacement credentials report saved_unverified without provider calls; name-only
+Shopping resolution does not create a project with the replacement token. Both
+REST and Alexa must share the overlay database/key on any future rollout.
+Existing production/Alexa are unchanged; local implementation verification is
+recorded separately from live provider credential validation.
+
+Database-enabled releases always read connection overrides even if the management
+key is removed: ciphertext becomes unavailable and tombstones still block the
+catalogue credential. A missing key never restores an older token. Preserve the
+dedicated key and migration006 rows for backup/restore. Do not roll back to a
+legacy release that ignores overrides after a disconnect; retain a compatible
+release or first apply an explicitly reviewed server-side catalogue revocation.
+Never drop tombstones as routine rollback or cleanup.

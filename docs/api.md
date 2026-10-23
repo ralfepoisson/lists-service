@@ -27,11 +27,23 @@ verified on 2026-07-31.
 - `DELETE /v1/items?status=completed` deletes all completed tasks returned
   inside the configured rolling history window and requires
   `X-Confirm-Destructive-Action: true`.
-- `GET /v1/todoist/connection` returns only `connected|not_connected` and
-  `canManageConnection: false` for the verified JWT `accountId`.
-- `POST /v1/todoist/connection/authorizations` and
-  `DELETE /v1/todoist/connection` return `403`: browser onboarding and
-  disconnection are intentionally unavailable in this release.
+- `GET /v1/todoist/connection` returns tenant `connected|not_connected`,
+  `canManageConnection`, and when management is configured a numeric `version`.
+  Active catalogue credentials are `server_configured`; replacements are
+  `saved_unverified`. Disconnected tombstones have no credential status.
+- `PUT /v1/todoist/connection` accepts only `{apiToken, expectedVersion}` for an
+  existing catalogued tenant. It encrypts without contacting Todoist and returns
+  the new safe status/version. It never echoes the token or accepts account IDs.
+- `DELETE /v1/todoist/connection` requires destructive confirmation and numeric
+  current `If-Match`. It clears replacement ciphertext and stores a durable
+  disconnection tombstone, preserving Todoist tasks and server catalogue secrets.
+  Subsequent requests/retries cannot fall back to the old catalogue token.
+- Stale Save/Disconnect returns409. Missing management configuration or unknown
+  catalogue tenants return403; unauthenticated401; automation403. All management
+  uses verified Life2 account membership. Key saving is not provider validation.
+- `POST /v1/todoist/connection/authorizations` remains403: OAuth onboarding is
+  unavailable. Replacement-token Shopping access keeps the server project ID or
+  resolves an existing unique name without provider project creation.
 - `GET|POST /v1/task-lists` lists the connected tenant's existing Todoist
   projects or creates a new Todoist project.
 - `GET|POST /v1/task-lists/{listId}/tasks` lists or creates scoped tasks;

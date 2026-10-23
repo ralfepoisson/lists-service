@@ -167,7 +167,7 @@ end note
 note bottom of Connection
   The catalogue contains no token values and rejects duplicate
   accountId entries. A missing entry reports not_connected.
-  Browser onboarding and disconnect are unavailable.
+  OAuth onboarding remains unavailable. Local write-only replacement and\n  confirmed disconnect use a separate encrypted override/tombstone.
 end note
 
 note bottom of Item
@@ -218,4 +218,14 @@ note right of Comment
 UUID request keys pass through to Todoist.
 No Lists-owned comment or replay table is added.
 end note
+entity "Todoist credential override" as CredentialOverride {
+  * account_id : verified Life2 tenant <<PK>>
+  --
+  encrypted_token : AES-256-GCM ciphertext [null = disconnected]
+  * version : positive integer
+  * updated_by : verified subject
+  * updated_at : timestamptz
+}
+Connection ||..o| CredentialOverride : overrides; null suppresses fallback
+Migration ..> CredentialOverride : 006 additive; no secret backfill
 @enduml

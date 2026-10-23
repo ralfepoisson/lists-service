@@ -171,8 +171,13 @@ export class RestControllerFactory {
       new TagService(tagRepository),
       async () => {
         try {
-          const todoistReady =
+          const connection =
             this.config.todoistTenantCatalogSecretArn === undefined
+              ? undefined
+              : await tenantServices.connectionStatus(security.life2AllowedAccountId);
+          // A deliberate disconnect disables optional provider checks, not unrelated Lists data.
+          const todoistReady =
+            !connection || connection.status === 'not_connected'
               ? true
               : await tenantServices
                   .shoppingForTenant(security.life2AllowedAccountId)

@@ -8,7 +8,8 @@ verified on 2026-07-31.
 
 - `GET /health` proves only Lambda/process liveness and is public.
 - `GET /health/heartbeat` returns exactly `{status, component}` at the JSON root (no `data` or `meta` envelope). It is public and performs one bounded Todoist task read
-  for the deployment-bound Shopping account. It returns only `healthy` or
+  for a connected deployment-bound Shopping account; an intentionally disconnected
+  account skips that optional provider read. Lists-owned database health is still required. It returns only `healthy` or
   `unhealthy` and never exposes the account, project, provider error, or token.
 - `GET /health/ready` calls Todoist for the configured project and requires the
   REST bearer token or a verified Life2 JWT and resolves Shopping for that

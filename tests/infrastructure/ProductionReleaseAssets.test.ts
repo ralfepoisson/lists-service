@@ -5,6 +5,10 @@ import { describe, expect, it } from 'vitest';
 const read = (path: string): string => readFileSync(path, 'utf8');
 
 describe('production release assets', () => {
+  it('keeps the OCI version default aligned with the package version', () => {
+    const version = (JSON.parse(read('package.json')) as { version: string }).version;
+    expect(read('Dockerfile')).toContain(`ARG COMPONENT_VERSION=${version}`);
+  });
   it('keeps the approved Loop seed tool in the local-only image target', () => {
     const dockerfile = read('Dockerfile');
     const compose = read('../compose.yaml');

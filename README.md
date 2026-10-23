@@ -632,3 +632,10 @@ dedicated key and migration006 rows for backup/restore. Do not roll back to a
 legacy release that ignores overrides after a disconnect; retain a compatible
 release or first apply an explicitly reviewed server-side catalogue revocation.
 Never drop tombstones as routine rollback or cleanup.
+
+An intentionally disconnected Todoist account disables its optional provider
+read in public heartbeat checks; Loops database readiness is still required.
+Connected-provider failures remain unhealthy. Container liveness uses `/health`,
+so disconnection does not create a restart loop. Existing public heartbeat reads
+for connected accounts are provider requests, distinct from provider-free setup
+GET/Save operations; never claim zero global provider requests after relaunch.

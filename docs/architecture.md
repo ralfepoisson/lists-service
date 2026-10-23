@@ -265,3 +265,7 @@ dedicated key and migration006 rows for backup/restore. Do not roll back to a
 legacy release that ignores overrides after a disconnect; retain a compatible
 release or first apply an explicitly reviewed server-side catalogue revocation.
 Never drop tombstones as routine rollback or cleanup.
+
+Public heartbeat treats an intentional Todoist disconnection as disabled optional
+provider access and still probes the Lists-owned database. A connected provider
+failure remains unhealthy. Container process liveness remains separate `/health`.

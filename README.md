@@ -595,7 +595,7 @@ SHA256 and runtime entrypoint are listed in the workspace `targets.json` and
 ## Profile Todoist management (local implementation)
 
 Profile → Connections → Todoist → Manage accepts a write-only replacement API
- token for an existing server-catalogued account, and confirms disconnection.
+token for an existing server-catalogued account, and confirms disconnection.
 `PUT /v1/todoist/connection` accepts only `{apiToken, expectedVersion}`;
 `DELETE` requires `X-Confirm-Destructive-Action: true` and the current numeric
 `If-Match` version. Life2 session/account membership is checked first; automation

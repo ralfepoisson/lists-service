@@ -23,19 +23,17 @@ class MemoryStore {
 }
 describe('Todoist connection factory', () => {
   it('reports safe versioned metadata and unverified saves without provider calls or reading original tokens', async () => {
-    const getSecret = vi
-      .fn()
-      .mockResolvedValue(
-        JSON.stringify({
-          connections: [
-            {
-              accountId: 'tenant-a',
-              tokenSecretRef: 'original-token',
-              shoppingProjectId: 'existing-project'
-            }
-          ]
-        })
-      );
+    const getSecret = vi.fn().mockResolvedValue(
+      JSON.stringify({
+        connections: [
+          {
+            accountId: 'tenant-a',
+            tokenSecretRef: 'original-token',
+            shoppingProjectId: 'existing-project'
+          }
+        ]
+      })
+    );
     const config = AppConfig.fromRestEnvironment({
       REST_API_TOKEN_SECRET_ARN: 'rest',
       LIFE2_JWT_SIGNING_KEY_SECRET_ARN: 'jwt',

@@ -16,8 +16,9 @@ import stat
 import subprocess
 import sys
 import time
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from backup_restore import perform_backup_restore
 from release_contract import ACCOUNT, IMAGE_PREFIX, REGION, LEGACY_UPGRADE_MIGRATIONS, LEGACY_UPGRADE_VERSIONS, UPGRADE_MIGRATIONS, UPGRADE_VERSION, load_protected_env, parse_manifest
@@ -384,6 +385,63 @@ def wait_for_public_acceptance(accept, attempts=10):
             time.sleep(1)
 
 
+@contextmanager
+def fence_legacy_credential_writes(migration_values, *, psql=pathlib.Path("/usr/bin/psql")):
+    """Fence only new override writes while selecting a predecessor that ignores them."""
+    parsed = urlsplit(migration_values["DATABASE_URL"])
+    environment = dict(os.environ, PGPASSWORD=unquote(parsed.password or ""), PGCONNECT_TIMEOUT="5")
+    process = subprocess.Popen(
+        [str(psql), "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1",
+         "-h", "127.0.0.1", "-p", str(parsed.port or 5432),
+         "-U", unquote(parsed.username or ""), "-d", parsed.path.lstrip("/")],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        text=True, env=environment,
+    )
+    def exchange(sql, expected):
+        if process.poll() is not None:
+            raise CandidateFailure("credential cutover fence was lost")
+        try:
+            process.stdin.write(sql + "\n"); process.stdin.flush()
+            if process.stdout.readline().strip() != expected:
+                raise CandidateFailure("credential cutover fence is unavailable or occupied")
+        except (BrokenPipeError, OSError) as error:
+            raise CandidateFailure("credential cutover fence was lost") from error
+    def ensure_owned():
+        # A read resets the bounded idle lease before any rollback actions.
+        exchange("SELECT 'lists_override_fenced';", "lists_override_fenced")
+    try:
+        exchange(
+            "BEGIN; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='10s'; "
+            "SET LOCAL idle_in_transaction_session_timeout='15min'; "
+            "LOCK TABLE lists_todoist_connections IN SHARE MODE; "
+            "SELECT CASE WHEN EXISTS (SELECT 1 FROM lists_todoist_connections) "
+            "THEN 'occupied' ELSE 'lists_override_fenced' END;",
+            "lists_override_fenced",
+        )
+        yield ensure_owned
+    finally:
+        if process.poll() is None:
+            try:
+                process.stdin.write("ROLLBACK;\n\\q\n"); process.stdin.flush()
+            except (BrokenPipeError, OSError):
+                pass
+            process.stdin.close()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.terminate(); process.wait(timeout=5)
+        process.stdout.close()
+
+
+def restore_ingress_after_failure(site, previous, *, legacy, project, compose_file):
+    if legacy:
+        # Abort blocked in-flight writes before releasing the fence or routing to old code.
+        _compose(project, compose_file, "stop", "api", timeout=180)
+    site.write_bytes(previous)
+    _run(["/usr/sbin/apache2ctl", "configtest"])
+    _run(["/usr/bin/systemctl", "reload", "apache2"])
+
+
 def activate_upgrade(sha):
     _require_installed_tools()
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
@@ -437,21 +495,30 @@ def activate_upgrade(sha):
     with backup.open("xb") as out:
         out.write(previous)
     backup.chmod(0o600)
-    try:
-        site.write_bytes(changed)
-        _run(["/usr/sbin/apache2ctl", "configtest"])
-        _run(["/usr/bin/systemctl", "reload", "apache2"])
-        wait_for_public_acceptance(lambda: accept("https://lists.life-sqrd.com"))
-        receipt = {"status": "activated", "revision": sha, "image": manifest["image"], "port": port, "previousRevision": before["revision"], "activatedAt": datetime.now(timezone.utc).isoformat()}
-        with (release / "activation.json").open("x") as out:
-            json.dump(receipt, out)
-        (release / "activation.json").chmod(0o600)
-        print("lists_upgrade=activated revision=" + sha)
-    except Exception:
-        site.write_bytes(previous)
-        _run(["/usr/sbin/apache2ctl", "configtest"])
-        _run(["/usr/bin/systemctl", "reload", "apache2"])
-        raise
+    legacy = before["version"] != UPGRADE_VERSION
+    migration_values = load_protected_env(shared / "migration.env", "migration")
+    fence = fence_legacy_credential_writes(migration_values) if legacy else nullcontext(None)
+    with fence as ensure_fenced:
+        try:
+            site.write_bytes(changed)
+            _run(["/usr/sbin/apache2ctl", "configtest"])
+            _run(["/usr/bin/systemctl", "reload", "apache2"])
+            wait_for_public_acceptance(lambda: accept("https://lists.life-sqrd.com"))
+            if ensure_fenced is not None:
+                ensure_fenced()
+            receipt = {"status": "activated", "revision": sha, "image": manifest["image"], "port": port, "previousRevision": before["revision"], "activatedAt": datetime.now(timezone.utc).isoformat()}
+            with (release / "activation.json").open("x") as out:
+                json.dump(receipt, out)
+            (release / "activation.json").chmod(0o600)
+            print("lists_upgrade=activated revision=" + sha)
+        except Exception:
+            if ensure_fenced is not None:
+                ensure_fenced()
+            restore_ingress_after_failure(
+                site, previous, legacy=legacy,
+                project="life2-lists-" + sha[:12], compose_file=release / "compose.generated.json",
+            )
+            raise
 
 
 def main():

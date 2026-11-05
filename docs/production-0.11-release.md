@@ -35,3 +35,20 @@ for laptop Docker operations. Install the separately reviewed host tools, stage
 the immutable candidate, pass the actual backup/isolated restore and double
 migration rehearsal, then select the candidate through the existing Apache-only
 upgrade boundary. Preserve ALB/DNS/Lambda, prior images and exact ingress rollback.
+
+## Credential-state-safe cutover and rollback
+
+The0.10 predecessor cannot interpret006 overrides or disconnect tombstones.
+The canonical route switch therefore holds a real PostgreSQL SHARE lock only
+on the new override table, first requiring that it is empty. Task/Loop reads
+and unrelated writes remain available; new credential writes wait briefly.
+The lock has bounded acquisition and an owned fifteen-minute idle lease. The
+activator rechecks fence ownership before committing acceptance or recovery.
+
+On successful acceptance the fence releases and the new runtime admits pending
+credential writes. On failure the candidate API is stopped while the fence is
+still owned, aborting pending writes before restoring the exact old Apache
+route. If the fence is lost or pre-existing override/tombstone rows exist, do
+not select old code. Preserve the new runtime/data and require explicit recovery
+coordination. Later application rollback must preserve006 and its exact managed
+key and must not ignore a saved replacement or disconnection state.

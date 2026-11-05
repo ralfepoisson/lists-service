@@ -109,7 +109,7 @@ class UpgradeNetworkTest(unittest.TestCase):
 
 class RetainedUpgradeBaselineTest(unittest.TestCase):
     def test_exact_retained_checksum_baseline_is_required_for_repeat_upgrade(self):
-        migrations = {name: "a" * 64 for name in host_candidate.UPGRADE_MIGRATIONS}
+        migrations = {name: "a" * 64 for name in host_candidate.LEGACY_UPGRADE_MIGRATIONS}
         accepted = {"schemaVersion": 2, "version": "0.10.1", "migrations": migrations}
         self.assertEqual(host_candidate.expected_baseline_tables(accepted, migrations), 6)
         changed = {**accepted, "migrations": {**migrations, "004_loop_comments.sql": "b" * 64}}
@@ -120,7 +120,7 @@ class RetainedUpgradeBaselineTest(unittest.TestCase):
 
 class PatchUpgradeBaselineTest(unittest.TestCase):
     def test_current_0103_baseline_requires_exact_migration_checksums(self):
-        migrations = {name: "a" * 64 for name in host_candidate.UPGRADE_MIGRATIONS}
+        migrations = {name: "a" * 64 for name in host_candidate.LEGACY_UPGRADE_MIGRATIONS}
         accepted = {"schemaVersion": 2, "version": "0.10.3", "migrations": migrations}
         self.assertEqual(host_candidate.expected_baseline_tables(accepted, migrations), 6)
         with self.assertRaises(host_candidate.CandidateFailure):
@@ -129,7 +129,7 @@ class PatchUpgradeBaselineTest(unittest.TestCase):
 
 class HeartbeatPatchUpgradeBaselineTest(unittest.TestCase):
     def test_current_0104_baseline_requires_exact_migration_checksums(self):
-        migrations = {name: "a" * 64 for name in host_candidate.UPGRADE_MIGRATIONS}
+        migrations = {name: "a" * 64 for name in host_candidate.LEGACY_UPGRADE_MIGRATIONS}
         accepted = {"schemaVersion": 2, "version": "0.10.4", "migrations": migrations}
         self.assertEqual(host_candidate.expected_baseline_tables(accepted, migrations), 6)
         with self.assertRaises(host_candidate.CandidateFailure):
@@ -157,7 +157,7 @@ class PublicReloadAcceptanceTest(unittest.TestCase):
 
 class MembershipPatchUpgradeBaselineTest(unittest.TestCase):
     def test_current_0105_baseline_requires_exact_migration_checksums(self):
-        migrations = {name: "a" * 64 for name in host_candidate.UPGRADE_MIGRATIONS}
+        migrations = {name: "a" * 64 for name in host_candidate.LEGACY_UPGRADE_MIGRATIONS}
         accepted = {"schemaVersion": 2, "version": "0.10.5", "migrations": migrations}
         self.assertEqual(host_candidate.expected_baseline_tables(accepted, migrations), 6)
         with self.assertRaises(host_candidate.CandidateFailure):

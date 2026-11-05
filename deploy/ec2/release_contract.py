@@ -15,8 +15,10 @@ ACCOUNT = "154596858576"
 REGION = "eu-west-1"
 VERSION = "0.9.0"
 MIGRATION = "001_loops.sql"
-UPGRADE_VERSION = "0.10.6"
-UPGRADE_MIGRATIONS = ("001_loops.sql", "002_lists_tags.sql", "003_loop_seed_identity.sql", "004_loop_comments.sql", "005_loop_asset_references.sql")
+UPGRADE_VERSION = "0.11.0"
+LEGACY_UPGRADE_VERSIONS = ("0.10.1", "0.10.3", "0.10.4", "0.10.5", "0.10.6")
+LEGACY_UPGRADE_MIGRATIONS = ("001_loops.sql", "002_lists_tags.sql", "003_loop_seed_identity.sql", "004_loop_comments.sql", "005_loop_asset_references.sql")
+UPGRADE_MIGRATIONS = LEGACY_UPGRADE_MIGRATIONS + ("006_todoist_connections.sql",)
 UPGRADE_MANIFEST_KEYS = {"schemaVersion", "component", "version", "revision", "image", "migrations"}
 IMAGE_PREFIX = f"{ACCOUNT}.dkr.ecr.{REGION}.amazonaws.com/life2-lists@sha256:"
 MANIFEST_KEYS = {
@@ -33,7 +35,7 @@ BACKUP_ENV = {
     "PGHOST_HELPER", "PGDATABASE", "PGUSER_BACKUP", "PGPASSWORD_BACKUP",
     "PGUSER_RESTORE", "PGPASSWORD_RESTORE",
 }
-OPTIONAL_RUNTIME_ENV = {"LOG_LEVEL", "COMPLETED_LOOKBACK_DAYS", "TODOIST_API_BASE_URL"}
+OPTIONAL_RUNTIME_ENV = {"LOG_LEVEL", "COMPLETED_LOOKBACK_DAYS", "TODOIST_API_BASE_URL", "TODOIST_CONNECTION_KEY_SECRET_ARN"}
 
 
 def validate_manifest(manifest):
@@ -43,7 +45,7 @@ def validate_manifest(manifest):
         raise ValueError("release manifest has unexpected fields")
     if type(manifest["schemaVersion"]) is not int or manifest["schemaVersion"] != (2 if upgrade else 1):
         raise ValueError("unsupported release manifest schema")
-    if manifest["component"] != "lists-service" or manifest["version"] not in (("0.10.1", "0.10.3", "0.10.4", "0.10.5", UPGRADE_VERSION) if upgrade else (VERSION,)):
+    if manifest["component"] != "lists-service" or manifest["version"] not in ((*LEGACY_UPGRADE_VERSIONS, UPGRADE_VERSION) if upgrade else (VERSION,)):
         raise ValueError("release component or version mismatch")
     if not isinstance(manifest["revision"], str) or not re.fullmatch(
         r"[0-9a-f]{40}", manifest["revision"]
@@ -55,7 +57,7 @@ def validate_manifest(manifest):
         raise ValueError("release image must be the exact ECR digest")
     if upgrade:
         migrations = manifest["migrations"]
-        if not isinstance(migrations, dict) or set(migrations) != set(UPGRADE_MIGRATIONS) or any(
+        if not isinstance(migrations, dict) or set(migrations) != set(UPGRADE_MIGRATIONS if manifest["version"] == UPGRADE_VERSION else LEGACY_UPGRADE_MIGRATIONS) or any(
             not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
             for value in migrations.values()
         ):
@@ -186,6 +188,7 @@ def load_protected_env(path, kind, expected_uid=0):
         for name in (
             "REST_API_TOKEN_SECRET_ARN", "LIFE2_JWT_SIGNING_KEY_SECRET_ARN",
             "TODOIST_TENANT_CATALOG_SECRET_ARN",
+            *(("TODOIST_CONNECTION_KEY_SECRET_ARN",) if "TODOIST_CONNECTION_KEY_SECRET_ARN" in values else ()),
         ):
             if not re.fullmatch(arn_pattern, values[name]):
                 raise ValueError(f"{name} must be an in-account Secrets Manager ARN")

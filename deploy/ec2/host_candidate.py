@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote, urlsplit
 
 from backup_restore import perform_backup_restore
-from release_contract import ACCOUNT, IMAGE_PREFIX, REGION, UPGRADE_MIGRATIONS, UPGRADE_VERSION, load_protected_env, parse_manifest
+from release_contract import ACCOUNT, IMAGE_PREFIX, REGION, LEGACY_UPGRADE_MIGRATIONS, LEGACY_UPGRADE_VERSIONS, UPGRADE_MIGRATIONS, UPGRADE_VERSION, load_protected_env, parse_manifest
 
 
 APP_ROOT = pathlib.Path("/srv/apps/life2-lists")
@@ -173,6 +173,7 @@ def _verify_secret_access(runtime_values):
     for key in (
         "REST_API_TOKEN_SECRET_ARN", "LIFE2_JWT_SIGNING_KEY_SECRET_ARN",
         "TODOIST_TENANT_CATALOG_SECRET_ARN",
+        *(("TODOIST_CONNECTION_KEY_SECRET_ARN",) if "TODOIST_CONNECTION_KEY_SECRET_ARN" in runtime_values else ()),
     ):
         arn = runtime_values[key]
         output = _run([
@@ -223,8 +224,10 @@ def _verify_image(manifest):
 def expected_baseline_tables(baseline, migrations):
     if baseline.get("schemaVersion") == 1 and baseline.get("version") == "0.9.0" and baseline.get("migrationSha256") == migrations.get("001_loops.sql"):
         return 3
-    if baseline.get("schemaVersion") == 2 and baseline.get("version") in ("0.10.1", "0.10.3", "0.10.4", "0.10.5") and baseline.get("migrations") == migrations:
+    if baseline.get("schemaVersion") == 2 and baseline.get("version") in LEGACY_UPGRADE_VERSIONS and baseline.get("migrations") == {name: migrations[name] for name in LEGACY_UPGRADE_MIGRATIONS}:
         return 6
+    if baseline.get("schemaVersion") == 2 and baseline.get("version") == UPGRADE_VERSION and baseline.get("migrations") == migrations:
+        return 7
     raise CandidateFailure("retained Lists schema or checksums are not an accepted upgrade baseline")
 
 
@@ -232,7 +235,7 @@ def _retained_ingress_network(manifest):
     from candidate_smoke import _request, _expect
     identity = _expect(*_request("https://lists.life-sqrd.com", "/version"), 200)
     sha = identity.get("revision")
-    if identity.get("version") not in ("0.9.0", "0.10.1", "0.10.3", "0.10.4", "0.10.5") or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+    if identity.get("version") not in ("0.9.0", *LEGACY_UPGRADE_VERSIONS, UPGRADE_VERSION) or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise CandidateFailure("upgrade requires retained public provenance")
     previous = APP_ROOT / "releases" / sha
     _trusted_file(previous / "release.json", 0o600)
@@ -284,6 +287,8 @@ def stage_candidate(staged):
         raise CandidateFailure("runtime and migration database roles must differ")
     if backup_values["PGUSER_BACKUP"] == backup_values["PGUSER_RESTORE"]:
         raise CandidateFailure("backup and restore database roles must differ")
+    if manifest["version"] == UPGRADE_VERSION and not runtime_values.get("TODOIST_CONNECTION_KEY_SECRET_ARN"):
+        raise CandidateFailure("Todoist management requires its dedicated encryption key secret")
     _verify_secret_access(runtime_values)
     initial_alias = _alias_version()
     port = _available_port()
@@ -406,6 +411,9 @@ def activate_upgrade(sha):
         _expect(*_request(base, "/v1/loops?status=all", token=primary), 200)
         _expect(*_request(base, "/v1/tags", token=primary), 200)
         _expect(*_request(base, "/v1/task-lists", token=primary), 200)
+        connection = _expect(*_request(base, "/v1/todoist/connection", token=primary), 200)
+        if connection.get("data", {}).get("canManageConnection") is not True:
+            raise CandidateFailure("Todoist management configuration is unavailable")
         _expect(*_request(base, "/v1/loops", token="invalid"), 401)
         loop_id = result.get("smoke", {}).get("loopId")
         if not isinstance(loop_id, str) or not re.fullmatch(r"[0-9a-f-]{36}", loop_id):
@@ -416,7 +424,7 @@ def activate_upgrade(sha):
     _trusted_file(site, 0o644)
     previous = site.read_bytes()
     before = _expect(*_request("https://lists.life-sqrd.com", "/version"), 200)
-    if before.get("version") not in ("0.9.0", "0.10.1", "0.10.3", "0.10.4", "0.10.5") or not isinstance(before.get("revision"), str) or not re.fullmatch(r"[0-9a-f]{40}", before["revision"]):
+    if before.get("version") not in ("0.9.0", *LEGACY_UPGRADE_VERSIONS, UPGRADE_VERSION) or not isinstance(before.get("revision"), str) or not re.fullmatch(r"[0-9a-f]{40}", before["revision"]):
         raise CandidateFailure("upgrade requires the retained accepted public baseline")
     previous_manifest = APP_ROOT / "releases" / before.get("revision", "invalid") / "release.json"
     _trusted_file(previous_manifest, 0o600)

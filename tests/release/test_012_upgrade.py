@@ -35,9 +35,9 @@ class CalendarUpgradeReleaseTest(unittest.TestCase):
         source=(ROOT/'scripts/publish-ec2-candidate.sh').read_text()
         self.assertIn('--build-arg COMPONENT_VERSION=0.12.0',source)
 
-    def test_calendar_internal_dns_has_one_component_specific_alias(self):
+    def test_unselected_candidate_does_not_advertise_a_shared_canonical_alias(self):
         compose=host_candidate.render_compose(image=release_contract.IMAGE_PREFIX+'a'*64, runtime_env='/srv/apps/life2-lists/shared/runtime.env', migration_env='/srv/apps/life2-lists/shared/migration.env', port=43240)
         networks=compose['services']['api']['networks']
         self.assertEqual(set(networks), {'postgresql','ingress'})
-        self.assertEqual(networks['postgresql']['aliases'], ['lists-api'])
+        self.assertEqual(networks, ['postgresql','ingress'])
         self.assertEqual(compose['services']['migrate']['networks'], ['postgresql'])

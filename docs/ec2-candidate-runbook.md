@@ -306,3 +306,12 @@ Public activation allows up to ten one-second complete acceptance attempts after
 Apache graceful reload, which may briefly serve the retained generation. Every
 attempt still requires exact new identity, real readiness, all tenant reads and
 negative authorization. Exhaustion restores the captured ingress; no gate is waived.
+
+Calendar's production stored-source tools use the canonical selected HTTPS Lists
+origin. Unselected/recovery candidates never advertise a shared lists-api alias.
+The maintained real PostgreSQL CI supplies CALENDAR_LOOP_TEST_DSN for its own
+new lists_test loopback server (explicit nondefault port, databasepostgres), and
+enables all12Calendar concurrency/CLI cases there. The previous explicit native
+disposable-schema opt-in remains available when no DSN is supplied; CI never
+falls through to that shared native server. Foreign saves retain typed
+LoopNotFoundError and preserve original rows/references.

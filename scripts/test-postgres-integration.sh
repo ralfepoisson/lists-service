@@ -30,6 +30,8 @@ started=true
 
 export DATABASE_URL="postgresql://lists_test@127.0.0.1:$port/postgres"
 export LISTS_TEST_DATABASE_URL="$DATABASE_URL"
+export CALENDAR_LOOP_TEST_PG=local-disposable-schema
+export CALENDAR_LOOP_TEST_DSN="$DATABASE_URL"
 export POSTGRES_BIN_DIR="$postgres_bin_dir"
 cd "$repository_root"
 if [[ "${1:-}" == --roles-only ]]; then

@@ -69,7 +69,7 @@ def render_compose(*, image, runtime_env, migration_env, port, ingress_network=N
                 "restart": "unless-stopped",
                 "env_file": [runtime_env],
                 "ports": [f"127.0.0.1:{port}:3000"],
-                "networks": {"postgresql": {"aliases": ["lists-api"]}, "ingress": {}},
+                "networks": ["postgresql", "ingress"],
                 "healthcheck": {
                     "test": [
                         "CMD", "node", "-e",

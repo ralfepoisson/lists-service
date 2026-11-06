@@ -5,6 +5,7 @@ import { PostgresLoopRepository } from '../../src/adapters/postgres/PostgresLoop
 import { Loop, type RelatedRecord } from '../../src/domain/Loop.js';
 import { LoopService } from '../../src/application/LoopService.js';
 import { Pool } from 'pg';
+import { LoopNotFoundError } from '../../src/domain/errors.js';
 
 const databaseUrl = process.env['LISTS_TEST_DATABASE_URL'];
 
@@ -205,7 +206,7 @@ describe.skipIf(!databaseUrl)('PostgresLoopRepository on disposable PostgreSQL',
     const original = await repository.findById('tenant-a', protectedId);
     await expect(
       repository.save(new Loop({ ...original!, accountId: 'tenant-b' }))
-    ).rejects.toThrow('Loop no longer exists.');
+    ).rejects.toThrow(LoopNotFoundError);
     const unchanged = await repository.findById('tenant-a', original!.id);
     expect(unchanged?.relatedRecords).toEqual(original?.relatedRecords);
   });

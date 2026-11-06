@@ -8,11 +8,28 @@ import { build } from 'esbuild';
 import { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 
+const explicitDsn = process.env['CALENDAR_LOOP_TEST_DSN'];
+if (explicitDsn) {
+  const target = new URL(explicitDsn);
+  if (
+    target.hostname !== '127.0.0.1' ||
+    target.username !== 'lists_test' ||
+    target.pathname !== '/postgres' ||
+    !target.port ||
+    target.port === '5432'
+  )
+    throw new Error('Calendar release tests require their owned loopback PostgreSQL fixture.');
+}
+const ownedPool = (): Pool =>
+  new Pool(
+    explicitDsn ? { connectionString: explicitDsn } : { host: '/tmp', database: 'postgres' }
+  );
+
 const enabled = process.env['CALENDAR_LOOP_TEST_PG'] === 'local-disposable-schema';
 describe.skipIf(!enabled)('Calendar migration production entrypoint', () => {
   it('registers007 through the actual bundled CLI, preserving legacy data and checksums on repeat', async () => {
     const schema = `calendar_loop_cli_${randomUUID().replaceAll('-', '')}`;
-    const admin = new Pool({ host: '/tmp', database: 'postgres' });
+    const admin = ownedPool();
     const folder = await mkdtemp(join(tmpdir(), 'calendar-loop-cli-'));
     let created = false;
     try {
@@ -72,8 +89,8 @@ describe.skipIf(!enabled)('Calendar migration production entrypoint', () => {
         logLevel: 'silent'
       });
       await cp('migrations', join(folder, 'migrations'), { recursive: true });
-      const url = new URL('postgresql:///postgres');
-      url.searchParams.set('host', '/tmp');
+      const url = new URL(explicitDsn ?? 'postgresql:///postgres');
+      if (!explicitDsn) url.searchParams.set('host', '/tmp');
       url.searchParams.set('options', `-c search_path=${schema}`);
       const run = (): string =>
         execFileSync(process.execPath, [executable], {

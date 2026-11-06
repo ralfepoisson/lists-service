@@ -13,9 +13,26 @@ type Context = {
   schema: string;
   application: string;
 };
+const explicitDsn = process.env['CALENDAR_LOOP_TEST_DSN'];
+if (explicitDsn) {
+  const target = new URL(explicitDsn);
+  if (
+    target.hostname !== '127.0.0.1' ||
+    target.username !== 'lists_test' ||
+    target.pathname !== '/postgres' ||
+    !target.port ||
+    target.port === '5432'
+  )
+    throw new Error('Calendar release tests require their owned loopback PostgreSQL fixture.');
+}
+const ownedPool = (): Pool =>
+  new Pool(
+    explicitDsn ? { connectionString: explicitDsn } : { host: '/tmp', database: 'postgres' }
+  );
+
 async function isolated(work: (context: Context) => Promise<void>, legacy = false): Promise<void> {
   const schema = `calendar_loop_test_${randomUUID().replaceAll('-', '')}`;
-  const admin = new Pool({ host: '/tmp', database: 'postgres' });
+  const admin = ownedPool();
   let created = false;
   let repository: PostgresLoopRepository | undefined;
   try {
@@ -31,8 +48,8 @@ async function isolated(work: (context: Context) => Promise<void>, legacy = fals
     } finally {
       client.release();
     }
-    const url = new URL('postgresql:///postgres');
-    url.searchParams.set('host', '/tmp');
+    const url = new URL(explicitDsn ?? 'postgresql:///postgres');
+    if (!explicitDsn) url.searchParams.set('host', '/tmp');
     url.searchParams.set('options', `-c search_path=${schema}`);
     url.searchParams.set('application_name', schema);
     repository = new PostgresLoopRepository(url.toString());

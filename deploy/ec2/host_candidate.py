@@ -109,7 +109,7 @@ def _require_installed_tools():
     if os.geteuid() != 0 or pathlib.Path(__file__).resolve() != INSTALLED_ROOT / "host_candidate.py":
         raise CandidateFailure("candidate helper is not installed as root")
     for name in (
-        "host_candidate.py", "release_contract.py", "backup_restore.py", "candidate_smoke.py"
+        "host_candidate.py", "release_contract.py", "backup_restore.py", "candidate_smoke.py", "calendar_owner_acceptance.py"
     ):
         _trusted_file(INSTALLED_ROOT / name, 0o755)
     _trusted_file(pathlib.Path("/usr/local/sbin/life2-lists-candidate"), 0o755)
@@ -258,7 +258,7 @@ def _retained_ingress_network(manifest):
     return name, tables
 
 
-def stage_candidate(staged):
+def stage_candidate(staged, *, calendar_owner_sentinel=False):
     _require_installed_tools()
     manifest, data = _snapshot_manifest(staged)
     if manifest["schemaVersion"] == 2 and manifest["version"] != UPGRADE_VERSION:
@@ -345,10 +345,12 @@ def stage_candidate(staged):
         started = True
         _compose(project, compose_file, "up", "--detach", "--wait", "--wait-timeout", "120", "api", timeout=180)
         from candidate_smoke import run_smoke
-        smoke = run_smoke(
-            f"http://127.0.0.1:{port}", shared / "smoke-primary.jwt",
-            shared / "smoke-foreign.jwt", expected_revision=sha, expected_uid=0, expected_version=manifest["version"],
-        )
+        from calendar_owner_acceptance import acceptance_context
+        with acceptance_context(shared, release, migration_values, f"http://127.0.0.1:{port}", enabled=calendar_owner_sentinel, expected_revision=sha, expected_version=manifest["version"]) as sentinel:
+            smoke = run_smoke(
+                f"http://127.0.0.1:{port}", shared / "smoke-primary.jwt",
+                shared / "smoke-foreign.jwt", expected_revision=sha, expected_uid=0, expected_version=manifest["version"], calendar_sentinel=sentinel,
+            )
         if _alias_version() != initial_alias:
             raise CandidateFailure("active Lambda alias changed during candidate validation")
         result = {
@@ -442,7 +444,7 @@ def restore_ingress_after_failure(site, previous, *, legacy, project, compose_fi
     _run(["/usr/bin/systemctl", "reload", "apache2"])
 
 
-def activate_upgrade(sha):
+def activate_upgrade(sha, *, calendar_owner_sentinel=False):
     _require_installed_tools()
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise CandidateFailure("upgrade revision is invalid")
@@ -460,23 +462,36 @@ def activate_upgrade(sha):
     from candidate_smoke import _request, _expect, load_token
     shared = APP_ROOT / "shared"
     primary = load_token(shared / "smoke-primary.jwt")
-    foreign = load_token(shared / "smoke-foreign.jwt")
+    from calendar_owner_acceptance import PROFILE, acceptance_context
+    expected_profile = PROFILE if calendar_owner_sentinel else "two-genuine-tenant-jwts/v1"
+    if result.get("smoke", {}).get("acceptanceProfile", "two-genuine-tenant-jwts/v1") != expected_profile:
+        raise CandidateFailure("explicit activation profile must match candidate acceptance")
+    foreign = None if calendar_owner_sentinel else load_token(shared / "smoke-foreign.jwt")
+    migration_values = load_protected_env(shared / "migration.env", "migration")
     def accept(base):
-        version = _expect(*_request(base, "/version"), 200)
-        if version.get("version") != manifest["version"] or version.get("revision") != sha:
-            raise CandidateFailure("upgrade served identity differs")
-        _expect(*_request(base, "/health/heartbeat"), 200)
-        _expect(*_request(base, "/v1/loops?status=all", token=primary), 200)
-        _expect(*_request(base, "/v1/tags", token=primary), 200)
-        _expect(*_request(base, "/v1/task-lists", token=primary), 200)
-        connection = _expect(*_request(base, "/v1/todoist/connection", token=primary), 200)
-        if connection.get("data", {}).get("canManageConnection") is not True:
-            raise CandidateFailure("Todoist management configuration is unavailable")
-        _expect(*_request(base, "/v1/loops", token="invalid"), 401)
-        loop_id = result.get("smoke", {}).get("loopId")
-        if not isinstance(loop_id, str) or not re.fullmatch(r"[0-9a-f-]{36}", loop_id):
-            raise CandidateFailure("upgrade lacks persisted Loop evidence")
-        _expect(*_request(base, "/v1/loops/" + loop_id, token=foreign), 404)
+        with acceptance_context(shared, release, migration_values, base, enabled=calendar_owner_sentinel, expected_revision=sha, expected_version=manifest["version"]) as sentinel:
+            version = _expect(*_request(base, "/version"), 200)
+            if version.get("version") != manifest["version"] or version.get("revision") != sha:
+                raise CandidateFailure("upgrade served identity differs")
+            _expect(*_request(base, "/health/heartbeat"), 200)
+            _expect(*_request(base, "/v1/loops?status=all", token=primary), 200)
+            _expect(*_request(base, "/v1/tags", token=primary), 200)
+            _expect(*_request(base, "/v1/task-lists", token=primary), 200)
+            connection = _expect(*_request(base, "/v1/todoist/connection", token=primary), 200)
+            if connection.get("data", {}).get("canManageConnection") is not True:
+                raise CandidateFailure("Todoist management configuration is unavailable")
+            _expect(*_request(base, "/v1/loops", token="invalid"), 401)
+            if sentinel is None:
+                _expect(*_request(base, "/v1/loops", token=foreign), 200)
+            loop_id = result.get("smoke", {}).get("loopId")
+            if not isinstance(loop_id, str) or not re.fullmatch(r"[0-9a-f-]{36}", loop_id):
+                raise CandidateFailure("upgrade lacks persisted Loop evidence")
+            _expect(*_request(base, "/v1/loops/" + loop_id, token=primary), 200)
+            if sentinel is None:
+                _expect(*_request(base, "/v1/loops/" + loop_id, token=foreign), 404)
+            else:
+                from calendar_owner_acceptance import negative_http
+                negative_http(base, primary, sentinel['id'])
     accept("http://127.0.0.1:" + str(port))
     site = pathlib.Path("/etc/apache2/sites-available/life2-lists.conf")
     _trusted_file(site, 0o644)
@@ -506,7 +521,7 @@ def activate_upgrade(sha):
             wait_for_public_acceptance(lambda: accept("https://lists.life-sqrd.com"))
             if ensure_fenced is not None:
                 ensure_fenced()
-            receipt = {"status": "activated", "revision": sha, "image": manifest["image"], "port": port, "previousRevision": before["revision"], "activatedAt": datetime.now(timezone.utc).isoformat()}
+            receipt = {"status": "activated", "revision": sha, "image": manifest["image"], "port": port, "previousRevision": before["revision"], "activatedAt": datetime.now(timezone.utc).isoformat(), "acceptanceProfile": expected_profile, "secondPrincipalPositiveProven": not calendar_owner_sentinel}
             with (release / "activation.json").open("x") as out:
                 json.dump(receipt, out)
             (release / "activation.json").chmod(0o600)
@@ -525,12 +540,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("staged_manifest", type=pathlib.Path, nargs="?")
     parser.add_argument("--activate")
+    parser.add_argument("--calendar-owner-sentinel", action="store_true", help="Explicit limited Calendar profile; never equivalent to two-principal proof")
     args = parser.parse_args()
     try:
         if args.activate is not None and args.staged_manifest is None:
-            activate_upgrade(args.activate)
+            activate_upgrade(args.activate, calendar_owner_sentinel=args.calendar_owner_sentinel)
         elif args.staged_manifest is not None and args.activate is None:
-            stage_candidate(args.staged_manifest)
+            stage_candidate(args.staged_manifest, calendar_owner_sentinel=args.calendar_owner_sentinel)
         else:
             raise CandidateFailure("select one release operation")
     except Exception:

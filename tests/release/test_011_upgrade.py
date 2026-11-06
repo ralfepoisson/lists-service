@@ -17,7 +17,7 @@ class TodoistUpgradeReleaseTest(unittest.TestCase):
 
     def test_target_manifest_binds_all_seven_committed_migrations(self):
         target = release_contract.build_upgrade_manifest(revision='a'*40, image=release_contract.IMAGE_PREFIX+'b'*64, migrations_dir=ROOT/'migrations')
-        self.assertEqual(target['version'], '0.12.1')
+        self.assertEqual(target['version'], '0.12.2')
         self.assertEqual(target['migrations'], self.target_migrations())
 
     def test_retained_0106_baseline_requires_exact_first_five_checksums(self):

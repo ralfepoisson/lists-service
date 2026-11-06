@@ -16,7 +16,7 @@ class CalendarUpgradeReleaseTest(unittest.TestCase):
 
     def test_target_is_012_and_binds_every_migration_including_007(self):
         target = release_contract.build_upgrade_manifest(revision='a'*40, image=release_contract.IMAGE_PREFIX+'b'*64, migrations_dir=ROOT/'migrations')
-        self.assertEqual(target['version'], '0.12.1')
+        self.assertEqual(target['version'], '0.12.2')
         self.assertEqual(target['migrations'], self.migrations())
         self.assertEqual(host_candidate.expected_baseline_tables(target,target['migrations']),8)
 
@@ -33,7 +33,7 @@ class CalendarUpgradeReleaseTest(unittest.TestCase):
 
     def test_publisher_never_mislabels_012_as_011(self):
         source=(ROOT/'scripts/publish-ec2-candidate.sh').read_text()
-        self.assertIn('--build-arg COMPONENT_VERSION=0.12.1',source)
+        self.assertIn('--build-arg COMPONENT_VERSION=0.12.2',source)
 
     def test_unselected_candidate_does_not_advertise_a_shared_canonical_alias(self):
         compose=host_candidate.render_compose(image=release_contract.IMAGE_PREFIX+'a'*64, runtime_env='/srv/apps/life2-lists/shared/runtime.env', migration_env='/srv/apps/life2-lists/shared/migration.env', port=43240)

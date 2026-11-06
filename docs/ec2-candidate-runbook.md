@@ -317,3 +317,46 @@ falls through to that shared native server. Foreign saves retain typed
 LoopNotFoundError and preserve original rows/references.
 
 The0.12.1 packaging patch uses pinned Node24.22.2 and the reviewed APT2.6.2 update, retaining the0.12 schema/checksums and fixed candidate/ingress gates. The exact seven-migration0.12.0 baseline remains recognised. Prior unactivated images and their vulnerability scans stay retained; do not select them merely because publication passed.
+
+## Explicit Calendar single-owner isolation profile (0.12.2)
+
+The default remains two fresh genuine tenant JWTs, each checked by normal
+service authentication. There is no automatic fallback when a second token is
+missing, inactive or expired. Historical two-principal receipts remain intact.
+
+For the separately explicit Calendar production authority
+`Todoist:6hwGJ9CxJHj6Fg3R:6hwRG3hM6hqCHMQR`, the root operator may select
+`--calendar-owner-sentinel` at BOTH staging and activation. Its matching
+root600 `shared/calendar-owner-acceptance.json` must bind schemaVersion
+`calendar-owner-sentinel/v1`, that authorityRef, the normal supplied token's
+accountId/sub and an expiresAt integer no more than24 hours ahead. It documents
+Codex execution within original approval, not a newly invented human receipt.
+Normal live Auth membership/API verification precedes any fixture insertion.
+
+This profile creates one closed, uniquely labelled DISPOSABLE Loop under a
+random `calendar-release-sentinel:<uuid>` database namespace, with subject
+`disposable-fixture-not-an-auth-principal`. It creates no Auth account, JWT,
+external task or customer content. The namespace/ID must not already exist.
+A root-private intent precedes SQL; a complete row/hash receipt follows. Own
+principal positive CRUD/comment/tag/readiness/CORS checks remain; that same
+principal must receive404 for sentinel GET/PATCH and comment GET/POST. Activation
+repeats real negative/positive checks on candidate loopback and public HTTPS.
+A before-delete row lock/complete JSON comparison and zero related/comment/
+append-operation checks prevent cascade deletion of any changed row; any drift
+fails closed and retains exact provenance for reconciliation. After each scope,
+only the exact unchanged fixture is removed and its zero residual count verified.
+No source/entity table is cleared, no foreign/customer row is touched, and no
+provider or impersonated foreign-principal request occurs.
+
+This is explicitly narrower evidence: it proves own-principal denial against a
+real foreign DB namespace alongside fresh real PostgreSQL owner-isolation
+regressions. It DOES NOT prove a second real person's current login, owning
+positive read/write, provider membership or full two-sided current tenant flow.
+Receipts expose the different acceptanceProfile and
+secondPrincipalPositiveProven=false; a candidate validated under it cannot be
+activated under another profile or by omitting the flag. It must be independently
+reviewed as this contract; it is never silently treated as equivalent.
+
+The0.12.2 patch also restores the full comment/CORS/Todoist/safe-heartbeat smoke
+assertions for0.12.1 and0.12.2, preserving exact0.12.0/0.12.1 recovery recognition
+and every existing schema/migration checksum. No domain schema changes.

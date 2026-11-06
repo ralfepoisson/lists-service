@@ -11,7 +11,7 @@ FROM node:24.22.2-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dca
 RUN apt-get -o Acquire::Retries=0 update \
     && apt-get -o Acquire::Retries=0 install --yes --no-install-recommends --only-upgrade apt=2.6.2 libapt-pkg6.0=2.6.2 \
     && rm -rf /var/lib/apt/lists/*
-ARG COMPONENT_VERSION=0.12.1
+ARG COMPONENT_VERSION=0.12.2
 ARG LIFE2_RELEASE_REVISION=development
 LABEL org.opencontainers.image.version=$COMPONENT_VERSION \
       org.opencontainers.image.revision=$LIFE2_RELEASE_REVISION

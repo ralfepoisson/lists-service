@@ -232,4 +232,9 @@ ConnectionManagement --> ConnectionOverrides
 ConnectionManagement --> SecretProvider : dedicated encryption key reference
 TodoistClient --> ConnectionManagement : resolve current token before each request/retry
 ConnectionManagement --> TenantCatalog : fallback only when no override exists
+note as CalendarReleaseAcceptance
+Release-only explicit Calendar profile: genuine own Auth + disposable
+foreign DB namespace sentinel; no Auth impersonation/provider/customer row.
+Default two-genuine-tenant gate retained; narrower evidence labelled explicitly.
+end note
 @enduml

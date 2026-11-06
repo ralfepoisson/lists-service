@@ -651,3 +651,9 @@ Source/disposable-database checks do not establish local activation, provider
 acceptance or a production release.
 
 The0.12.1 Calendar production candidate refreshes the exact existing Auth-qualified Node24.22.2/Bookworm image and APT2.6.2 pins. It retains the seven-migration/eight-table0.12 schema and exact0.12.0 recovery recognition. Actual image scanning/native acceptance is required; source pin changes alone are not a security or deployment pass.
+
+The0.12.2 Calendar release tooling retains default two-genuine-tenant acceptance
+and adds a separately explicit, original-authority-bound disposable sentinel
+profile. Its narrower own-positive/foreign-namespace-negative evidence never
+claims a second principal's current owning access; see the candidate runbook.
+Normal authentication and owner filtering are unchanged.

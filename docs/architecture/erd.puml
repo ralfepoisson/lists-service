@@ -240,4 +240,9 @@ entity "Todoist credential override" as CredentialOverride {
 }
 Connection ||..o| CredentialOverride : overrides; null suppresses fallback
 Migration ..> CredentialOverride : 006 additive; no secret backfill
+note as SentinelFixture
+No schema change: an exact disposable closed Loop may qualify the explicitly
+selected Calendar acceptance profile. Complete provenance/row equality and
+zero related records gate exact cleanup; no customer namespace is adopted.
+end note
 @enduml

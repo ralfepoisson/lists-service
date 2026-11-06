@@ -58,10 +58,11 @@ class MembershipPatchSmokeTest(unittest.TestCase):
         calls = []
         def request(base, path, **kwargs):
             calls.append((path, kwargs))
-            if path == "/version": return 200, {"version": "0.10.6", "revision": "a" * 40}
+            if path == "/version": return 200, {"version": "0.12.1", "revision": "a" * 40}
+            if path == "/v1/todoist/connection": return 200, {"data": {"canManageConnection": True}}
             if path == "/health/heartbeat": return 200, {"status": "healthy", "component": "lists-service"}
             if kwargs.get("token") == "invalid": return 401, {}
-            if kwargs.get("token") == "foreign": return 404, {}
+            if kwargs.get("token") == "foreign": return (200, {}) if path == "/v1/loops" else (404, {})
             if path.endswith("/comments") and kwargs.get("method") == "POST":
                 if any(p.endswith("/close") for p, _ in calls): return 409, {}
                 return 201, {"data": {"content": "Release comment persistence verified"}}
@@ -71,7 +72,8 @@ class MembershipPatchSmokeTest(unittest.TestCase):
             if path.startswith("/v1/loops/") and not path.endswith("comments"): return 200, {"data": {"title": "Release candidate aaaaaaaaaaaa marker"}}
             return 200, {}
         with patch.object(candidate_smoke, "load_token", side_effect=["primary", "foreign"]), patch.object(candidate_smoke, "_request", side_effect=request), patch.object(candidate_smoke.secrets, "token_hex", return_value="marker"), patch.object(candidate_smoke, "browser_acceptance") as browser:
-            candidate_smoke.run_smoke("http://127.0.0.1:43240", "primary", "foreign", expected_revision="a" * 40, expected_version="0.10.6")
+            candidate_smoke.run_smoke("http://127.0.0.1:43240", "primary", "foreign", expected_revision="a" * 40, expected_version="0.12.1")
         browser.assert_called_once()
+        self.assertTrue(any(path == "/v1/todoist/connection" for path, _ in calls))
         self.assertTrue(any(path == "/v1/tags" for path, _ in calls))
         self.assertTrue(any(path.endswith("/comments") and kwargs.get("method") == "POST" for path, kwargs in calls))

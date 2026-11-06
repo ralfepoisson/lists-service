@@ -168,3 +168,6 @@ UNIT negatives reject nonpositive, fractional, string and null supplied versions
 ## Calendar context search bound
 
 Calendar job delegations must GET `/v1/loops` with `status=open`, a2–120-character literal `query`, and an integer `limit`1–5. The owning PostgreSQL query applies tenant, open-state, literal `strpos` matching and `LIMIT` before transport; unbounded Calendar list requests fail400. Ordinary interactive list reads retain their existing contract. Exact Loop detail and the derived idempotent append remain separate. This changes no database shape.
+
+
+Reserved Calendar scopes (`life2:calendar-context` and `life2:calendar-triage`) identify the Calendar delegation family even when application/event/job markers are absent. Such incomplete signed grants fail closed; they cannot fall through to ordinary interactive authority. Normal interactive scopes and complete named Calendar grants retain their existing contracts. This is a validation correction, with no schema change.

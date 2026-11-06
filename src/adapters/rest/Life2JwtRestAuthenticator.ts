@@ -39,9 +39,15 @@ export class Life2JwtRestAuthenticator implements RestAuthenticator {
       typeof claims['accountId'] === 'string' &&
       claims['accountId'].length > 0
     ) {
+      const calendarScope =
+        typeof claims['scope'] === 'string' &&
+        claims['scope']
+          .split(/\s+/u)
+          .some((scope) => ['life2:calendar-context', 'life2:calendar-triage'].includes(scope));
       if (
         claims['applicationId'] !== 'life2-calendar-triage' &&
-        (Object.hasOwn(claims, 'calendarTriageEventId') ||
+        (calendarScope ||
+          Object.hasOwn(claims, 'calendarTriageEventId') ||
           Object.hasOwn(claims, 'calendarTriageJobId'))
       )
         return undefined;

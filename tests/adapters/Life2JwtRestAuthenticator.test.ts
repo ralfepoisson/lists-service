@@ -91,4 +91,10 @@ describe('Life2JwtRestAuthenticator', () => {
   ])('rejects a token with %s', (_reason, authorization) => {
     expect(authenticator.authenticate(authorization)).toBeUndefined();
   });
+  it.each(['life2:calendar-context', 'life2:calendar-triage'])(
+    'rejects reserved scope %s without job markers',
+    (scope) => {
+      expect(authenticator.authenticate(`Bearer ${token({ scope })}`)).toBeUndefined();
+    }
+  );
 });

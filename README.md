@@ -122,7 +122,7 @@ See the [architecture guide](docs/architecture.md), authoritative
 
 ## Prerequisites
 
-- Node.js `24.18.0` and npm `11.16.0`
+- Node.js `24.22.2` and npm `11.16.0`
 - Terraform `1.10` or newer
 - AWS CLI v2 with credentials for the target account
 - an AWS region supported by Alexa-hosted Lambda endpoints, normally
@@ -351,7 +351,7 @@ Then, from a clean local `main`, publish without changing the active alias:
 ./scripts/deploy-production.sh /absolute/mode-0600/production.env --candidate
 ```
 
-The script runs the complete quality gate under exact Node 24.18.0/npm 11.16.0
+The script runs the complete quality gate under exact Node 24.22.2/npm 11.16.0
 in the digest-pinned build container. Invoke the reported candidate version
 directly with an API Gateway v2 event: require public `/health` and
 `/health/heartbeat` 200, authenticated `/health/ready` 200, authenticated
@@ -649,3 +649,5 @@ limit of at most five; ordinary interactive lists retain their existing contract
 See [Calendar concurrency and context](docs/calendar-loop-concurrency.md).
 Source/disposable-database checks do not establish local activation, provider
 acceptance or a production release.
+
+The0.12.1 Calendar production candidate refreshes the exact existing Auth-qualified Node24.22.2/Bookworm image and APT2.6.2 pins. It retains the seven-migration/eight-table0.12 schema and exact0.12.0 recovery recognition. Actual image scanning/native acceptance is required; source pin changes alone are not a security or deployment pass.

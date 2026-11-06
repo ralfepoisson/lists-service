@@ -315,3 +315,5 @@ enables all12Calendar concurrency/CLI cases there. The previous explicit native
 disposable-schema opt-in remains available when no DSN is supplied; CI never
 falls through to that shared native server. Foreign saves retain typed
 LoopNotFoundError and preserve original rows/references.
+
+The0.12.1 packaging patch uses pinned Node24.22.2 and the reviewed APT2.6.2 update, retaining the0.12 schema/checksums and fixed candidate/ingress gates. The exact seven-migration0.12.0 baseline remains recognised. Prior unactivated images and their vulnerability scans stay retained; do not select them merely because publication passed.

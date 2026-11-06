@@ -15,7 +15,8 @@ ACCOUNT = "154596858576"
 REGION = "eu-west-1"
 VERSION = "0.9.0"
 MIGRATION = "001_loops.sql"
-UPGRADE_VERSION = "0.12.0"
+UPGRADE_VERSION = "0.12.1"
+PREVIOUS_CALENDAR_VERSIONS = ("0.12.0",)
 LEGACY_UPGRADE_VERSIONS = ("0.10.1", "0.10.3", "0.10.4", "0.10.5", "0.10.6")
 LEGACY_UPGRADE_MIGRATIONS = ("001_loops.sql", "002_lists_tags.sql", "003_loop_seed_identity.sql", "004_loop_comments.sql", "005_loop_asset_references.sql")
 TODOIST_UPGRADE_MIGRATIONS = LEGACY_UPGRADE_MIGRATIONS + ("006_todoist_connections.sql",)
@@ -23,7 +24,7 @@ UPGRADE_MIGRATIONS = TODOIST_UPGRADE_MIGRATIONS + ("007_loop_mutation_versions.s
 
 
 def migrations_for_version(version):
-    if version == UPGRADE_VERSION:
+    if version in (*PREVIOUS_CALENDAR_VERSIONS, UPGRADE_VERSION):
         return UPGRADE_MIGRATIONS
     if version == "0.11.0":
         return TODOIST_UPGRADE_MIGRATIONS
@@ -57,7 +58,7 @@ def validate_manifest(manifest):
         raise ValueError("release manifest has unexpected fields")
     if type(manifest["schemaVersion"]) is not int or manifest["schemaVersion"] != (2 if upgrade else 1):
         raise ValueError("unsupported release manifest schema")
-    if manifest["component"] != "lists-service" or manifest["version"] not in ((*LEGACY_UPGRADE_VERSIONS, "0.11.0", UPGRADE_VERSION) if upgrade else (VERSION,)):
+    if manifest["component"] != "lists-service" or manifest["version"] not in ((*LEGACY_UPGRADE_VERSIONS, "0.11.0", *PREVIOUS_CALENDAR_VERSIONS, UPGRADE_VERSION) if upgrade else (VERSION,)):
         raise ValueError("release component or version mismatch")
     if not isinstance(manifest["revision"], str) or not re.fullmatch(
         r"[0-9a-f]{40}", manifest["revision"]

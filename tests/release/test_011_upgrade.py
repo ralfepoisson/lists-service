@@ -15,13 +15,13 @@ class TodoistUpgradeReleaseTest(unittest.TestCase):
     def target_migrations(self):
         return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT / 'migrations').glob('*.sql')}
 
-    def test_target_manifest_binds_all_six_committed_migrations(self):
+    def test_target_manifest_binds_all_seven_committed_migrations(self):
         target = release_contract.build_upgrade_manifest(revision='a'*40, image=release_contract.IMAGE_PREFIX+'b'*64, migrations_dir=ROOT/'migrations')
-        self.assertEqual(target['version'], '0.11.0')
+        self.assertEqual(target['version'], '0.12.0')
         self.assertEqual(target['migrations'], self.target_migrations())
 
     def test_retained_0106_baseline_requires_exact_first_five_checksums(self):
-        target=self.target_migrations(); old={k:v for k,v in target.items() if not k.startswith('006_')}
+        target=self.target_migrations(); old={k:v for k,v in target.items() if k in release_contract.LEGACY_UPGRADE_MIGRATIONS}
         retained={'schemaVersion':2,'version':'0.10.6','migrations':old}
         self.assertEqual(host_candidate.expected_baseline_tables(retained,target),6)
         release_contract.validate_manifest({**retained,'component':'lists-service','revision':'a'*40,'image':release_contract.IMAGE_PREFIX+'b'*64})
@@ -30,7 +30,7 @@ class TodoistUpgradeReleaseTest(unittest.TestCase):
 
     def test_current_011_schema_has_seven_tables_with_exact_all_six_checksums(self):
         target=self.target_migrations()
-        self.assertEqual(host_candidate.expected_baseline_tables({'schemaVersion':2,'version':'0.11.0','migrations':target},target),7)
+        self.assertEqual(host_candidate.expected_baseline_tables({'schemaVersion':2,'version':'0.11.0','migrations':{k:v for k,v in target.items() if k in release_contract.TODOIST_UPGRADE_MIGRATIONS}},target),7)
 
     def test_new_key_preflight_reads_exact_secret_arn_without_returning_value(self):
         values={k:'arn:aws:secretsmanager:eu-west-1:154596858576:secret:'+k for k in ('REST_API_TOKEN_SECRET_ARN','LIFE2_JWT_SIGNING_KEY_SECRET_ARN','TODOIST_TENANT_CATALOG_SECRET_ARN','TODOIST_CONNECTION_KEY_SECRET_ARN')}

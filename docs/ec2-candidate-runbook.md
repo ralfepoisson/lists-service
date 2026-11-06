@@ -1,3 +1,15 @@
+# 0.12 Calendar concurrency release
+
+The0.12 candidate binds all seven exact SQL migration hashes including007.
+The current retained0.11 baseline is accepted only with its original six hashes;
+legacy supported0.10 baselines still require their original five hashes. Schema
+counts are respectively8,7,6 tables and unknown/changed checksums fail closed.
+The publisher, image labels and manifest all use0.12.0. Real restored-clone migration
+rehearsal runs twice before canonical DDL; no Calendar append receipts or historical
+jobs are manufactured. Candidate/public acceptance retains complete heartbeat,
+Todoist-management, browser/CORS, real two-tenant reads and Loop/comment gates.
+Existing source/manual/reference rows and rollback ingress are preserved.
+
 # 0.10.6 membership enforcement acceptance
 
 Activate after the production Auth session resolver is live. The0.10.6 image,

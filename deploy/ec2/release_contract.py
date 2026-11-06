@@ -15,10 +15,22 @@ ACCOUNT = "154596858576"
 REGION = "eu-west-1"
 VERSION = "0.9.0"
 MIGRATION = "001_loops.sql"
-UPGRADE_VERSION = "0.11.0"
+UPGRADE_VERSION = "0.12.0"
 LEGACY_UPGRADE_VERSIONS = ("0.10.1", "0.10.3", "0.10.4", "0.10.5", "0.10.6")
 LEGACY_UPGRADE_MIGRATIONS = ("001_loops.sql", "002_lists_tags.sql", "003_loop_seed_identity.sql", "004_loop_comments.sql", "005_loop_asset_references.sql")
-UPGRADE_MIGRATIONS = LEGACY_UPGRADE_MIGRATIONS + ("006_todoist_connections.sql",)
+TODOIST_UPGRADE_MIGRATIONS = LEGACY_UPGRADE_MIGRATIONS + ("006_todoist_connections.sql",)
+UPGRADE_MIGRATIONS = TODOIST_UPGRADE_MIGRATIONS + ("007_loop_mutation_versions.sql",)
+
+
+def migrations_for_version(version):
+    if version == UPGRADE_VERSION:
+        return UPGRADE_MIGRATIONS
+    if version == "0.11.0":
+        return TODOIST_UPGRADE_MIGRATIONS
+    if version in LEGACY_UPGRADE_VERSIONS:
+        return LEGACY_UPGRADE_MIGRATIONS
+    raise ValueError("unsupported release version")
+
 UPGRADE_MANIFEST_KEYS = {"schemaVersion", "component", "version", "revision", "image", "migrations"}
 IMAGE_PREFIX = f"{ACCOUNT}.dkr.ecr.{REGION}.amazonaws.com/life2-lists@sha256:"
 MANIFEST_KEYS = {
@@ -45,7 +57,7 @@ def validate_manifest(manifest):
         raise ValueError("release manifest has unexpected fields")
     if type(manifest["schemaVersion"]) is not int or manifest["schemaVersion"] != (2 if upgrade else 1):
         raise ValueError("unsupported release manifest schema")
-    if manifest["component"] != "lists-service" or manifest["version"] not in ((*LEGACY_UPGRADE_VERSIONS, UPGRADE_VERSION) if upgrade else (VERSION,)):
+    if manifest["component"] != "lists-service" or manifest["version"] not in ((*LEGACY_UPGRADE_VERSIONS, "0.11.0", UPGRADE_VERSION) if upgrade else (VERSION,)):
         raise ValueError("release component or version mismatch")
     if not isinstance(manifest["revision"], str) or not re.fullmatch(
         r"[0-9a-f]{40}", manifest["revision"]
@@ -57,7 +69,7 @@ def validate_manifest(manifest):
         raise ValueError("release image must be the exact ECR digest")
     if upgrade:
         migrations = manifest["migrations"]
-        if not isinstance(migrations, dict) or set(migrations) != set(UPGRADE_MIGRATIONS if manifest["version"] == UPGRADE_VERSION else LEGACY_UPGRADE_MIGRATIONS) or any(
+        if not isinstance(migrations, dict) or set(migrations) != set(migrations_for_version(manifest["version"])) or any(
             not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
             for value in migrations.values()
         ):

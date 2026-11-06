@@ -1,64 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { LoopService } from '../../src/application/LoopService.js';
-import type { LoopRepository } from '../../src/application/ports/LoopRepository.js';
 import type { Loop, RelatedRecord } from '../../src/domain/Loop.js';
-import type { LoopComment } from '../../src/domain/LoopComment.js';
 import { ValidationError } from '../../src/domain/errors.js';
 
-class InMemoryLoopRepository implements LoopRepository {
-  readonly loops: Loop[] = [];
-  readonly comments: { accountId: string; comment: LoopComment }[] = [];
-
-  async listComments(accountId: string, loopId: string): Promise<LoopComment[]> {
-    return this.comments
-      .filter((entry) => entry.accountId === accountId && entry.comment.loopId === loopId)
-      .map((entry) => entry.comment);
-  }
-
-  async addComment(accountId: string, comment: LoopComment): Promise<LoopComment> {
-    this.comments.push({ accountId, comment });
-    return comment;
-  }
-
-  async create(loop: Loop): Promise<Loop> {
-    this.loops.push(loop);
-    return loop;
-  }
-
-  async createSeeded(
-    accountId: string,
-    seedKey: string,
-    loop: Loop
-  ): Promise<{ loop: Loop; created: boolean }> {
-    const existing = this.loops.find(
-      (candidate) => candidate.accountId === accountId && candidate.seedKey === seedKey
-    );
-    if (existing) return { loop: existing, created: false };
-    this.loops.push(loop);
-    return { loop, created: true };
-  }
-
-  async findById(accountId: string, id: string): Promise<Loop | undefined> {
-    return this.loops.find((loop) => loop.accountId === accountId && loop.id === id);
-  }
-
-  async list(accountId: string, status: 'open' | 'closed' | 'all'): Promise<Loop[]> {
-    return this.loops.filter(
-      (loop) => loop.accountId === accountId && (status === 'all' || loop.status === status)
-    );
-  }
-
-  async save(loop: Loop): Promise<Loop> {
-    const index = this.loops.findIndex((candidate) => candidate.id === loop.id);
-    this.loops[index] = loop;
-    return loop;
-  }
-
-  async isReady(): Promise<boolean> {
-    return true;
-  }
-}
+import { InMemoryLoopRepository } from '../support/InMemoryLoopRepository.js';
 
 describe('LoopService', () => {
   it('creates and updates asset references alongside entities, documents, and tasks', async () => {
@@ -76,7 +22,8 @@ describe('LoopService', () => {
     });
     expect(created.relatedRecords).toEqual(relatedRecords);
     const updated = await service.update('tenant-a', 'user-a', created.id, {
-      relatedRecords: [{ kind: 'asset', recordId: 'asset-2', label: 'Replacement vehicle' }]
+      relatedRecords: [{ kind: 'asset', recordId: 'asset-2', label: 'Replacement vehicle' }],
+      expectedVersion: created.version
     });
     expect(updated.relatedRecords).toEqual([
       { kind: 'asset', recordId: 'asset-2', label: 'Replacement vehicle' }
@@ -226,6 +173,7 @@ describe('LoopService', () => {
       description: null,
       dueDate: null,
       priority: 'low',
+      expectedVersion: 1,
       relatedRecords: [{ kind: 'entity', recordId: 'entity-1', label: 'Entity' }]
     });
     expect(updated).toMatchObject({
@@ -239,7 +187,11 @@ describe('LoopService', () => {
       relatedRecords: [{ kind: 'entity', recordId: 'entity-1', label: 'Entity' }]
     });
     await expect(
-      service.update('tenant-a', 'user-b', 'loop-1', { outcome: 'New result', relatedRecords: [] })
+      service.update('tenant-a', 'user-b', 'loop-1', {
+        outcome: 'New result',
+        relatedRecords: [],
+        expectedVersion: updated.version
+      })
     ).resolves.toMatchObject({ outcome: 'New result', relatedRecords: [] });
   });
 

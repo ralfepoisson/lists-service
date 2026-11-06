@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Loop, LoopPriority, RelatedRecord, RelatedRecordKind } from '../domain/Loop.js';
+import type {
+  CalendarReferenceAppend,
+  Loop,
+  LoopAppendResult,
+  LoopPatch,
+  LoopPriority,
+  RelatedRecord,
+  RelatedRecordKind
+} from '../domain/Loop.js';
 import { Loop as LoopRecord } from '../domain/Loop.js';
 import { LoopClosedError, LoopNotFoundError, ValidationError } from '../domain/errors.js';
 import type { LoopComment } from '../domain/LoopComment.js';
@@ -16,6 +24,7 @@ export interface CreateLoopInput {
 }
 
 export interface UpdateLoopInput {
+  readonly expectedVersion?: number;
   readonly title?: string;
   readonly description?: string | null;
   readonly priority?: LoopPriority;
@@ -96,6 +105,19 @@ export class LoopService {
     return this.repository.list(accountId, status);
   }
 
+  async searchCalendarContext(accountId: string, query: string, limit: number): Promise<Loop[]> {
+    if (
+      typeof query !== 'string' ||
+      query.trim().length < 2 ||
+      query.trim().length > 120 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 5
+    )
+      throw new ValidationError('Calendar Loop search requires a literal query and limit1–5.');
+    return this.repository.list(accountId, 'open', { query: query.trim(), limit });
+  }
+
   async get(accountId: string, id: string): Promise<Loop> {
     const loop = await this.repository.findById(accountId, id);
     if (loop === undefined) throw new LoopNotFoundError();
@@ -103,43 +125,38 @@ export class LoopService {
   }
 
   async update(accountId: string, sub: string, id: string, input: UpdateLoopInput): Promise<Loop> {
-    const existing = await this.get(accountId, id);
-    if (existing.status === 'closed') {
-      throw new ValidationError('Closed loops cannot be updated.');
-    }
-    if (Object.keys(input).length === 0) {
+    const patch: LoopPatch = {
+      ...(input.title === undefined ? {} : { title: this.requiredText(input.title, 'title', 160) }),
+      ...(input.description === undefined
+        ? {}
+        : {
+            description:
+              input.description === null
+                ? null
+                : this.optionalText(input.description, 'description', 2_000)!
+          }),
+      ...(input.priority === undefined ? {} : { priority: this.priority(input.priority) }),
+      ...(input.outcome === undefined
+        ? {}
+        : { outcome: this.requiredText(input.outcome, 'outcome', 2_000) }),
+      ...(input.dueDate === undefined
+        ? {}
+        : { dueDate: input.dueDate === null ? null : this.optionalDate(input.dueDate)! }),
+      ...(input.relatedRecords === undefined
+        ? {}
+        : { relatedRecords: this.relatedRecords(input.relatedRecords) }),
+      ...(input.expectedVersion === undefined ? {} : { expectedVersion: input.expectedVersion })
+    };
+    if (Object.keys(patch).filter((key) => key !== 'expectedVersion').length === 0)
       throw new ValidationError('At least one loop field must be provided.');
-    }
-    return this.repository.save(
-      new LoopRecord({
-        ...existing,
-        title:
-          input.title === undefined ? existing.title : this.requiredText(input.title, 'title', 160),
-        description:
-          input.description === undefined
-            ? existing.description
-            : input.description === null
-              ? undefined
-              : this.optionalText(input.description, 'description', 2_000),
-        priority: input.priority === undefined ? existing.priority : this.priority(input.priority),
-        outcome:
-          input.outcome === undefined
-            ? existing.outcome
-            : this.requiredText(input.outcome, 'outcome', 2_000),
-        dueDate:
-          input.dueDate === undefined
-            ? existing.dueDate
-            : input.dueDate === null
-              ? undefined
-              : this.optionalDate(input.dueDate),
-        relatedRecords:
-          input.relatedRecords === undefined
-            ? existing.relatedRecords
-            : this.relatedRecords(input.relatedRecords),
-        updatedBySub: sub,
-        updatedAt: this.clock()
-      })
-    );
+    if (
+      input.expectedVersion !== undefined &&
+      (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1)
+    )
+      throw new ValidationError('expectedVersion must be a positive integer.');
+    if (input.relatedRecords !== undefined && input.expectedVersion === undefined)
+      throw new ValidationError('Replacing relatedRecords requires expectedVersion.');
+    return this.repository.patch(accountId, id, sub, patch, this.clock());
   }
 
   async listComments(accountId: string, id: string): Promise<LoopComment[]> {
@@ -168,22 +185,41 @@ export class LoopService {
   }
 
   async close(accountId: string, sub: string, id: string, confirmed: boolean): Promise<Loop> {
-    if (!confirmed) {
+    if (confirmed !== true) {
       throw new ValidationError(
         'Closing a loop requires confirming that its outcome has happened.'
       );
     }
-    const existing = await this.get(accountId, id);
-    if (existing.status === 'closed') return existing;
-    const now = this.clock();
-    return this.repository.save(
-      new LoopRecord({
-        ...existing,
-        status: 'closed',
-        updatedBySub: sub,
-        updatedAt: now,
-        closedAt: now
-      })
+    return this.repository.closeLoop(accountId, id, sub, this.clock());
+  }
+
+  async appendReference(
+    accountId: string,
+    sub: string,
+    id: string,
+    input: CalendarReferenceAppend
+  ): Promise<LoopAppendResult> {
+    if (
+      input.expectedVersion !== undefined &&
+      (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1)
+    )
+      throw new ValidationError('expectedVersion must be a positive integer.');
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+    if (!uuid.test(input.operationId) || !uuid.test(input.eventId))
+      throw new ValidationError('Canonical operation and Calendar event UUIDs are required.');
+    const eventId = input.eventId.toLowerCase();
+    if (
+      input.record.kind !== 'appointment' ||
+      input.record.recordId !== `calendar:${eventId}` ||
+      input.record.label !== 'Calendar event'
+    )
+      throw new ValidationError('Only the fixed Calendar event reference is permitted.');
+    return this.repository.appendReference(
+      accountId,
+      id,
+      sub,
+      { ...input, eventId, operationId: input.operationId.toLowerCase() },
+      this.clock()
     );
   }
 
@@ -227,6 +263,7 @@ export class LoopService {
   }
 
   private relatedRecords(records: readonly RelatedRecord[]): readonly RelatedRecord[] {
+    if (!Array.isArray(records)) throw new ValidationError('relatedRecords must be an array.');
     if (records.length > 100)
       throw new ValidationError('A loop can reference at most 100 records.');
     const keys = new Set<string>();

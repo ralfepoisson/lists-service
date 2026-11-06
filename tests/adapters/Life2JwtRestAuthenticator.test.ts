@@ -53,6 +53,17 @@ describe('Life2JwtRestAuthenticator', () => {
     });
   });
 
+  it('rejects partial Calendar job claims instead of returning an interactive identity', () => {
+    for (const claims of [
+      {
+        applicationId: 'unrelated-app',
+        calendarTriageEventId: '7ed5cd51-71c2-4c05-84cf-7127e64c18d0'
+      },
+      { calendarTriageJobId: null }
+    ])
+      expect(authenticator.authenticate(`Bearer ${token(claims)}`)).toBeUndefined();
+  });
+
   it.each([
     ['missing bearer', undefined],
     ['missing account', `Bearer ${token({ accountId: undefined })}`],

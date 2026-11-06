@@ -9,6 +9,8 @@ export type RestPrincipal =
       readonly email: string;
       readonly applicationId?: string;
       readonly scope?: string;
+      readonly calendarTriageEventId?: string;
+      readonly calendarTriageJobId?: string;
     };
 
 export interface RestAuthenticator {

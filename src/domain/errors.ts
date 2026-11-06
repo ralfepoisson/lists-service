@@ -6,6 +6,7 @@ export type ApplicationErrorCode =
   | 'ITEM_NOT_FOUND'
   | 'LOOP_NOT_FOUND'
   | 'LOOP_CLOSED'
+  | 'LOOP_VERSION_CONFLICT'
   | 'TASK_LIST_NOT_FOUND'
   | 'TASK_NOT_FOUND'
   | 'TODOIST_NOT_CONNECTED'
@@ -48,6 +49,12 @@ export class LoopNotFoundError extends ApplicationError {
 export class LoopClosedError extends ApplicationError {
   constructor() {
     super('LOOP_CLOSED', 'Closed loops cannot receive new comments.', 409);
+  }
+}
+
+export class LoopVersionConflictError extends ApplicationError {
+  constructor(message = 'Loop changed; reload before replacing references.') {
+    super('LOOP_VERSION_CONFLICT', message, 409);
   }
 }
 

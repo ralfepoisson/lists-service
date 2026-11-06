@@ -83,10 +83,21 @@ entity "Loop" as Loop {
   * outcome : varchar(2000)
   dueDate : date [0..1]
   * status : open | closed
+  * version : positive integer
   * createdBySub, updatedBySub : Life2 user identifier
   createdAt, updatedAt, closedAt : timestamp
 }
 
+entity "Calendar append operation receipt" as LoopAppendReceipt {
+  * account_id : tenant PK
+  * operation_id : UUID PK
+  --
+  loop_id, event_id : immutable binding
+  payload_sha256 : fixed reference intent
+  applied_version : original Loop version
+  created_at : timestamptz
+}
+Loop ||--o{ LoopAppendReceipt : atomic append and immutable receipt
 entity "Loop profile comment" as LoopComment {
   * id : uuid
   --
@@ -146,6 +157,7 @@ Tag ||--o{ TagAssignment : classifies
 Loop ||..o{ TagAssignment : Lists-owned UUID
 Item ||..o{ TagAssignment : tenant + Todoist task identity
 Migration ..> Loop : 001_loops.sql creates
+Migration ..> LoopAppendReceipt : 007 adds receipt and Loop version; maintained CLI registered
 Migration ..> LoopReference : 005 widens asset-kind CHECK; no source copy
 
 note right of Configuration

@@ -34,6 +34,18 @@ class FixtureAuthenticator implements RestAuthenticator {
         scope: header === 'Bearer email-agent' ? 'life2:task-dispatch' : 'life2:read'
       };
     }
+    if (header === 'Bearer calendar-agent') {
+      return {
+        authMethod: 'life2',
+        accountId: 'account-123',
+        sub: 'user-123',
+        email: 'user@example.com',
+        applicationId: 'life2-calendar-triage',
+        scope: 'life2:calendar-context life2:calendar-triage',
+        calendarTriageEventId: '0e177595-84c1-43a9-a708-5a39d72763bd',
+        calendarTriageJobId: '380bac5b-4b44-4654-9a03-ce50c5565a74'
+      } as RestPrincipal;
+    }
     if (header === 'Bearer rest-secret') {
       return { authMethod: 'automation', accountId: 'account-123' };
     }
@@ -255,6 +267,7 @@ describe('RestApiController', () => {
     expect(create.statusCode).toBe(201);
     expect(JSON.parse(create.body).data).toEqual({
       id: 'loop-1',
+      version: 1,
       title: 'Car service',
       description: undefined,
       priority: 'medium',
@@ -373,6 +386,79 @@ describe('RestApiController', () => {
     expect(JSON.parse((await request('GET', '/v1/tags')).body).data).toHaveLength(1);
   });
 
+  it('confines Calendar job delegation to Loop reads and derived idempotent association', async () => {
+    const fixture = new RestControllerFixture();
+    const send = (method: string, path: string, body?: unknown): Promise<RestResponse> =>
+      fixture.controller.handle(
+        fixture.request({
+          method,
+          path,
+          headers: { authorization: 'Bearer calendar-agent' },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) })
+        })
+      );
+    await fixture.loopService.create('account-123', 'user-123', {
+      title: 'Existing',
+      outcome: 'Done'
+    });
+    for (const [method, path, body] of [
+      ['GET', '/v1/task-lists', undefined],
+      ['POST', '/v1/loops', { title: 'Forbidden', outcome: 'No' }],
+      ['PATCH', '/v1/loops/loop-1', { title: 'Forbidden' }],
+      ['POST', '/v1/loops/loop-1/close', { confirmed: true }],
+      ['POST', '/v1/loops/loop-1/comments', { content: 'Forbidden' }]
+    ] as const)
+      expect((await send(method, path, body)).statusCode).toBe(403);
+    expect((await send('GET', '/v1/loops')).statusCode).toBe(400);
+    const bounded = await fixture.controller.handle(
+      fixture.request({
+        method: 'GET',
+        path: '/v1/loops',
+        headers: { authorization: 'Bearer calendar-agent' },
+        query: { status: 'open', query: 'Existing', limit: '5' }
+      })
+    );
+    expect(bounded.statusCode).toBe(200);
+    expect(JSON.parse(bounded.body).data).toHaveLength(1);
+    const excessive = await fixture.controller.handle(
+      fixture.request({
+        method: 'GET',
+        path: '/v1/loops',
+        headers: { authorization: 'Bearer calendar-agent' },
+        query: { status: 'open', query: 'Existing', limit: '6' }
+      })
+    );
+    expect(excessive.statusCode).toBe(400);
+    expect(
+      (await send('POST', '/v1/loops/loop-1/calendar-reference', { eventId: 'foreign' })).statusCode
+    ).toBe(400);
+    const applied = await send('POST', '/v1/loops/loop-1/calendar-reference', {
+      expectedVersion: 1
+    });
+    expect(applied.statusCode).toBe(200);
+    expect(JSON.parse(applied.body).data).toMatchObject({
+      appended: true,
+      replayed: false,
+      referencePresent: true
+    });
+    const replay = await send('POST', '/v1/loops/loop-1/calendar-reference', {
+      expectedVersion: 1
+    });
+    expect(JSON.parse(replay.body).data).toMatchObject({
+      appended: false,
+      replayed: true,
+      referencePresent: true
+    });
+    const loop = JSON.parse((await send('GET', '/v1/loops/loop-1')).body).data;
+    expect(loop.relatedRecords).toEqual([
+      {
+        kind: 'appointment',
+        recordId: 'calendar:0e177595-84c1-43a9-a708-5a39d72763bd',
+        label: 'Calendar event'
+      }
+    ]);
+  });
+
   it('reads, updates, filters, and explicitly closes Loops without crossing tenants', async () => {
     const fixture = new RestControllerFixture();
     const headers = { authorization: 'Bearer life2-tenant' };
@@ -405,7 +491,11 @@ describe('RestApiController', () => {
       ).statusCode
     ).toBe(201);
     const own = await request('GET', '/v1/loops/loop-1');
-    expect(JSON.parse(own.body).data).toMatchObject({ id: 'loop-1', dueDate: '2026-10-15' });
+    expect(JSON.parse(own.body).data).toMatchObject({
+      id: 'loop-1',
+      dueDate: '2026-10-15',
+      version: 1
+    });
     const foreign = await fixture.controller.handle(
       fixture.request({
         path: '/v1/loops/loop-1',
@@ -413,14 +503,28 @@ describe('RestApiController', () => {
       })
     );
     expect(foreign.statusCode).toBe(404);
+    expect((await request('PATCH', '/v1/loops/loop-1', { relatedRecords: [] })).statusCode).toBe(
+      400
+    );
     const changed = await request('PATCH', '/v1/loops/loop-1', {
+      expectedVersion: JSON.parse(own.body).data.version,
       title: 'Updated',
       description: null,
       dueDate: null,
       priority: 'low',
       relatedRecords: []
     });
+    expect(changed.statusCode).toBe(200);
+    expect(
+      (
+        await request('PATCH', '/v1/loops/loop-1', {
+          relatedRecords: [],
+          expectedVersion: JSON.parse(own.body).data.version
+        })
+      ).statusCode
+    ).toBe(409);
     expect(JSON.parse(changed.body).data).toMatchObject({
+      version: 2,
       title: 'Updated',
       priority: 'low',
       relatedRecords: []
@@ -437,7 +541,7 @@ describe('RestApiController', () => {
       JSON.parse((await request('GET', '/v1/loops', undefined, { status: 'closed' })).body).data
     ).toHaveLength(1);
     expect((await request('PATCH', '/v1/loops/loop-1', { title: 'Too late' })).statusCode).toBe(
-      400
+      409
     );
     expect((await request('GET', '/v1/loops/missing')).statusCode).toBe(404);
   });
@@ -529,7 +633,7 @@ describe('RestApiController', () => {
       expect(JSON.parse(response.body)).toEqual({
         schemaVersion: 1,
         component: 'lists-service',
-        version: '0.11.0',
+        version: '0.12.0',
         revision: 'lists-test-revision'
       });
     } finally {

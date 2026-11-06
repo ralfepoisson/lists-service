@@ -39,6 +39,12 @@ export class Life2JwtRestAuthenticator implements RestAuthenticator {
       typeof claims['accountId'] === 'string' &&
       claims['accountId'].length > 0
     ) {
+      if (
+        claims['applicationId'] !== 'life2-calendar-triage' &&
+        (Object.hasOwn(claims, 'calendarTriageEventId') ||
+          Object.hasOwn(claims, 'calendarTriageJobId'))
+      )
+        return undefined;
       return {
         authMethod: 'life2',
         accountId: claims['accountId'],
@@ -46,6 +52,12 @@ export class Life2JwtRestAuthenticator implements RestAuthenticator {
         email: claims['email'],
         ...(typeof claims['applicationId'] === 'string'
           ? { applicationId: claims['applicationId'] }
+          : {}),
+        ...(typeof claims['calendarTriageEventId'] === 'string'
+          ? { calendarTriageEventId: claims['calendarTriageEventId'] }
+          : {}),
+        ...(typeof claims['calendarTriageJobId'] === 'string'
+          ? { calendarTriageJobId: claims['calendarTriageJobId'] }
           : {}),
         ...(typeof claims['scope'] === 'string' ? { scope: claims['scope'] } : {})
       };

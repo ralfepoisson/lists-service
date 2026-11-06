@@ -83,6 +83,18 @@ and both PlantUML diagrams. Production release remains separate.
 | LST-LOOP-003 | Require explicit `confirmed: true` before closing a Loop; closing a related task alone cannot close the Loop.                                                                                        | Domain and REST tests plus authenticated acceptance.                                            |
 | LST-LOOP-004 | Support an external Plaud-aware agent only through Life2 MCP Loop operations; Lists must not call Plaud or store Plaud credentials.                                                                  | MCP catalogue, ADR 0007, architecture review, and source inspection.                            |
 
+LST-LOOP-006 (Calendar integration, source qualified; canonical runtime pending):
+Loop mutations preserve omitted fields and unrelated references, expose an integer
+version, and require observed-version CAS for explicit reference replacement.
+The named Calendar delegation permits owned Loop reads and one derived event
+association only. Its durable operation receipt prevents a replay from restoring
+a later human unlink or changing a closed Loop. Migration007 must be registered
+in the maintained migration CLI. Evidence: LoopMutation UNIT tests,
+LoopConcurrency real PostgreSQL tests, REST/JWT tests, and the real bundled
+LoopMigrationRunner regression over a legacy001–006 schema. The latter preserves
+old rows/checksums, adds version1, and verifies an unchanged second invocation.
+These tests do not establish canonical migration, deployment or LLM relevance.
+
 ## REST contract and security
 
 | ID          | Requirement                                                                                                                                                                                                                                                                                                                            | Acceptance evidence                                                          |

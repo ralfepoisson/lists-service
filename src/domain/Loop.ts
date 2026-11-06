@@ -11,6 +11,7 @@ export interface RelatedRecord {
 }
 
 export interface LoopAttributes {
+  readonly version?: number;
   readonly id: string;
   readonly accountId: string;
   readonly seedKey?: string;
@@ -29,6 +30,7 @@ export interface LoopAttributes {
 }
 
 export class Loop implements LoopAttributes {
+  readonly version: number;
   readonly id!: string;
   readonly accountId!: string;
   readonly seedKey?: string;
@@ -47,5 +49,31 @@ export class Loop implements LoopAttributes {
 
   constructor(attributes: LoopAttributes) {
     Object.assign(this, attributes);
+    this.version = attributes.version ?? 1;
   }
+}
+
+export interface LoopPatch {
+  readonly title?: string;
+  readonly description?: string | null;
+  readonly priority?: LoopPriority;
+  readonly outcome?: string;
+  readonly dueDate?: string | null;
+  readonly relatedRecords?: readonly RelatedRecord[];
+  readonly expectedVersion?: number;
+}
+
+export interface CalendarReferenceAppend {
+  readonly expectedVersion?: number;
+  readonly operationId: string;
+  readonly eventId: string;
+  readonly record: RelatedRecord;
+}
+
+export interface LoopAppendResult {
+  readonly loop: Loop;
+  readonly appended: boolean;
+  readonly replayed: boolean;
+  readonly referencePresent: boolean;
+  readonly appliedVersion: number;
 }

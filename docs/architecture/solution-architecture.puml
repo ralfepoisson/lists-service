@@ -161,6 +161,12 @@ note right of LoopRepositoryPort
   References include entity, asset, document, task and existing opaque kinds.
   Asset records remain Master Data-owned.
   Inserts lock the Loop row and reject closed status.
+  Metadata patches update only present fields; reference replacement requires integer CAS.
+  Close/comments/seed/reference mutations serialize and increment visible version.
+  Calendar first append checks observed version under the lock;
+  immutable account/operation/event/Loop intent receipts prevent replay after human unlink.
+  Scoped Calendar JWT permits only owned Loop reads and the derived association route.
+  Source-stage only until migrations, runtime and final acceptance qualify.
 end note
 PrintUseCase --> UseCases : list active items
 PrintUseCase --> PdfPort
@@ -211,6 +217,8 @@ note top of RestAlias
 end note
 
 note right of UseCases
+  Calendar job Loop context uses owner-scoped literal SQL search,
+  open state and LIMIT1-5 before transport; unbounded job lists fail closed.
   Search enumerates only the acting tenant's visible projects
   and active tasks. It is a transient projection and emits
   allowlisted route names rather than arbitrary URLs.

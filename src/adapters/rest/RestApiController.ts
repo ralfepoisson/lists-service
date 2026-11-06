@@ -154,6 +154,84 @@ export class RestApiController {
     request: RestRequest,
     principal: RestPrincipal
   ): Promise<RestResponse> {
+    if (principal.authMethod === 'life2' && principal.applicationId === 'life2-calendar-triage') {
+      const scopes = (principal.scope ?? '').split(/\s+/u);
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+      const eventId = principal.calendarTriageEventId;
+      const operationId = principal.calendarTriageJobId;
+      const append = /^\/v1\/loops\/([^/]+)\/calendar-reference$/u.exec(request.path);
+      const read =
+        request.method === 'GET' &&
+        (request.path === '/v1/loops' || /^\/v1\/loops\/[^/]+$/u.test(request.path));
+      if (
+        !scopes.includes('life2:calendar-context') ||
+        !scopes.includes('life2:calendar-triage') ||
+        !eventId ||
+        !operationId ||
+        !uuid.test(eventId) ||
+        !uuid.test(operationId) ||
+        (!read && !(request.method === 'POST' && append))
+      ) {
+        throw new AuthorizationForbiddenError(
+          'Calendar delegation permits only fixed Loop context and association.'
+        );
+      }
+      if (read && request.path === '/v1/loops') {
+        const query = request.query['query'],
+          limit = request.query['limit'];
+        if (
+          Object.keys(request.query).some((key) => !['status', 'query', 'limit'].includes(key)) ||
+          request.query['status'] !== 'open' ||
+          typeof query !== 'string' ||
+          typeof limit !== 'string' ||
+          !/^[1-5]$/u.test(limit) ||
+          request.body !== undefined
+        )
+          throw new ValidationError('Calendar Loop context requires bounded open literal search.');
+        const loops = await this.loopService.searchCalendarContext(
+          principal.accountId,
+          query,
+          Number(limit)
+        );
+        return this.success(
+          200,
+          loops.map((loop) => this.publicLoop(loop)),
+          request.requestId,
+          { count: loops.length }
+        );
+      }
+      if (append) {
+        const body = this.parseObjectBody(request.body);
+        this.onlyFields(body, ['expectedVersion']);
+        if (
+          !Number.isSafeInteger(body['expectedVersion']) ||
+          (body['expectedVersion'] as number) < 1
+        )
+          throw new ValidationError('Calendar association requires observed expectedVersion.');
+        if (Object.keys(request.query).length)
+          throw new ValidationError('Query parameters are not allowed.');
+        const result = await this.loopService.appendReference(
+          principal.accountId,
+          principal.sub,
+          decodeURIComponent(append[1] as string),
+          {
+            operationId,
+            eventId,
+            expectedVersion: body['expectedVersion'] as number,
+            record: {
+              kind: 'appointment',
+              recordId: `calendar:${eventId}`,
+              label: 'Calendar event'
+            }
+          }
+        );
+        return this.success(
+          200,
+          { ...result, loop: this.publicLoop(result.loop) },
+          request.requestId
+        );
+      }
+    }
     if (principal.authMethod === 'life2' && principal.applicationId === 'life2-email-agents') {
       const hasDispatchScope = (principal.scope ?? '')
         .split(/\s+/u)
@@ -714,6 +792,7 @@ export class RestApiController {
       dueDate: loop.dueDate,
       status: loop.status,
       relatedRecords: loop.relatedRecords,
+      version: loop.version,
       createdAt: loop.createdAt.toISOString(),
       updatedAt: loop.updatedAt.toISOString(),
       closedAt: loop.closedAt?.toISOString()
@@ -776,7 +855,8 @@ export class RestApiController {
       'priority',
       'outcome',
       'dueDate',
-      'relatedRecords'
+      'relatedRecords',
+      'expectedVersion'
     ]);
     if (Object.keys(values).length === 0) {
       throw new ValidationError('At least one loop field must be provided.');
@@ -804,7 +884,17 @@ export class RestApiController {
     ) {
       throw new ValidationError('dueDate must be a string or null.');
     }
+    if (
+      Object.hasOwn(values, 'expectedVersion') &&
+      (!Number.isSafeInteger(values['expectedVersion']) ||
+        (values['expectedVersion'] as number) < 1)
+    ) {
+      throw new ValidationError('expectedVersion must be a positive integer.');
+    }
     return {
+      ...(values['expectedVersion'] === undefined
+        ? {}
+        : { expectedVersion: values['expectedVersion'] }),
       ...(values['title'] === undefined ? {} : { title: values['title'] }),
       ...(values['outcome'] === undefined ? {} : { outcome: values['outcome'] }),
       ...(values['description'] === undefined ? {} : { description: values['description'] }),

@@ -1,5 +1,16 @@
 # Architecture
 
+Calendar association extends the existing Lists-owned Loop repository with
+integer mutation versions and immutable append-operation receipts. Field-presence
+patches, close, comments, seed reconciliation and associations share the owned row
+lock; explicit reference replacement requires the observed version. The named
+Calendar delegation may only read owned Loops and append its derived event pointer.
+An identical receipt replay reports current presence without restoring a human
+unlink or reopening a Loop. See [Calendar concurrency](calendar-loop-concurrency.md)
+and both architecture diagrams. Migration007 is explicitly registered by the
+maintained migration CLI; isolated real-PG qualification is separate from pending
+canonical migration and runtime acceptance.
+
 ## Status
 
 This document describes the implemented version 1 architecture. Source,

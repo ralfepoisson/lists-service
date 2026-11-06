@@ -639,3 +639,13 @@ Connected-provider failures remain unhealthy. Container liveness uses `/health`,
 so disconnection does not create a restart loop. Existing public heartbeat reads
 for connected accounts are provider requests, distinct from provider-free setup
 GET/Save operations; never claim zero global provider requests after relaunch.
+
+## Calendar triage integration candidate
+
+This 0.12.0 candidate preserves the qualified 0.11.0 release and adds optimistic
+Loop versions, field-presence updates and an idempotent derived Calendar-event
+reference. Calendar job discovery uses an owner-scoped literal query and an SQL
+limit of at most five; ordinary interactive lists retain their existing contract.
+See [Calendar concurrency and context](docs/calendar-loop-concurrency.md).
+Source/disposable-database checks do not establish local activation, provider
+acceptance or a production release.
